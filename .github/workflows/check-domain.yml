@@ -1,0 +1,35 @@
+name: Check domain
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"   # every 4 hours
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - run: python check_domain.py
+
+      - name: Save if the address changed
+        run: |
+          if git diff --quiet domain.json; then
+            echo "No change."
+          else
+            git config user.name "domain-bot"
+            git config user.email "domain-bot@users.noreply.github.com"
+            git add domain.json
+            git commit -m "Update domain to $(python -c 'import json;print(json.load(open("domain.json"))["domain"])')"
+            git push
+          fi
