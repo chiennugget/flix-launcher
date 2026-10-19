@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flix</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Flix">
+<meta name="theme-color" content="#0e0b10">
+<style>
+  :root {
+    --bg: #0e0b10;
+    --card: #1a1520;
+    --text: #f4eef6;
+    --muted: #9b8fa3;
+    --accent: #e5484d;
+    --accent-2: #ff8a5b;
+    --line: #2c2433;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { width: 100%; max-width: 380px; text-align: center; }
+  .logo {
+    width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+  }
+  .logo svg { width: 30px; height: 30px; margin-left: 4px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  #status { color: var(--muted); margin: 0 0 24px; min-height: 1.45em; }
+  .domain {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 16px; text-align: left;
+  }
+  .domain small { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .domain strong { font-size: 18px; word-break: break-all; }
+  .domain span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  a.btn {
+    display: block; text-decoration: none; font-weight: 600;
+    border-radius: 14px; padding: 15px; margin-bottom: 10px;
+  }
+  .primary { background: var(--accent); color: #fff; }
+  .secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  p.hint { color: var(--muted); font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="#fff"><path d="M6 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L7.5 3.64A1 1 0 0 0 6 4.5z"/></svg>
+  </div>
+  <h1>Flix</h1>
+  <p id="status">Finding the current address…</p>
+
+  <div class="domain">
+    <small>Current address</small>
+    <strong id="domain">—</strong>
+    <span id="updated"></span>
+  </div>
+
+  <a class="btn primary" id="brave" href="#">Open in Brave</a>
+  <a class="btn secondary" id="direct" href="#">Open here instead</a>
+
+  <p class="hint">From the Home Screen icon, Brave opens automatically. In Safari, tap Share → Add to Home Screen.</p>
+</main>
+
+<script>
+  // Used only if domain.json can't be loaded.
+  const FALLBACK = "flixbaba.best";
+
+  // Auto-open Brave only when launched from the Home Screen icon, so you can
+  // still browse to this page in Safari to add it. ?stay turns it off entirely.
+  const fromHomeScreen = window.navigator.standalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches;
+  const stay = !fromHomeScreen || new URLSearchParams(location.search).has("stay");
+  const $ = (id) => document.getElementById(id);
+
+  function clean(d) {
+    return String(d || "").trim().toLowerCase()
+      .replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  }
+
+  function launch(domain, note) {
+    const site = "https://" + domain + "/";
+    const brave = "brave://open-url?url=" + site;
+    $("domain").textContent = domain;
+    $("brave").href = brave;
+    $("direct").href = site;
+    $("status").textContent = stay ? note : "Opening Brave…";
+    if (!stay) setTimeout(() => { location.href = brave; }, 350);
+  }
+
+  fetch("domain.json?t=" + Date.now(), { cache: "no-store" })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((cfg) => {
+      const d = clean(cfg.domain) || FALLBACK;
+      if (cfg.updated) {
+        const when = new Date(cfg.updated);
+        if (!isNaN(when)) {
+          $("updated").textContent = (cfg.pinned ? "Set manually" : "Last changed") +
+            " " + when.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+        }
+      }
+      launch(d, "Ready.");
+    })
+    .catch(() => launch(FALLBACK, "Couldn't load the latest address, using the saved one."));
+</script>
+</body>
+</html>
