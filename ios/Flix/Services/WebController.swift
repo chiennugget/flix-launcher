@@ -40,6 +40,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     @Published private(set) var canGoBack = false
     @Published private(set) var canGoForward = false
     @Published private(set) var blocked = 0
+    /// Highest "Player N" the page itself offers, 0 if none were found.
+    @Published private(set) var detectedPlayers = 0
+
+    /// Shrinks the page to just its video player.
+    private(set) var playerOnly = false
 
     private(set) weak var webView: WKWebView?
     var isAllowed: (URL) -> Bool = { _ in true }
@@ -49,7 +54,8 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
 
     var currentURL: URL? { webView?.url }
 
-    func makeWebView(startURL: URL, rules: WKContentRuleList?) -> WKWebView {
+    func makeWebView(startURL: URL, rules: WKContentRuleList?, playerOnly: Bool, playerParam: String) -> WKWebView {
+        self.playerOnly = playerOnly
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = true
@@ -61,7 +67,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         let content = config.userContentController
         content.addUserScript(WKUserScript(source: Scripts.video, injectionTime: .atDocumentEnd,
                                            forMainFrameOnly: false))
+        let focusSetup = "window.__flixFocusDefault = \(playerOnly); window.__flixPlayerParam = '\(playerParam)';\n"
+        content.addUserScript(WKUserScript(source: focusSetup + Scripts.focus, injectionTime: .atDocumentEnd,
+                                           forMainFrameOnly: true))
         content.add(WeakScriptHandler(self), name: "flix")
+        content.add(WeakScriptHandler(self), name: "flixPage")
         if let rules { content.add(rules) }
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -89,6 +99,21 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         self.webView = webView
         webView.load(URLRequest(url: startURL))
         return webView
+    }
+
+    func load(_ url: URL) {
+        detectedPlayers = 0
+        webView?.load(URLRequest(url: url))
+    }
+
+    func setPlayerOnly(_ on: Bool) {
+        playerOnly = on
+        applyPlayerOnly()
+    }
+
+    private func applyPlayerOnly() {
+        webView?.evaluateJavaScript("window.__flixSetFocus && window.__flixSetFocus(\(playerOnly))",
+                                    in: nil, in: .page, completionHandler: nil)
     }
 
     func seek(to seconds: Double, in frame: WKFrameInfo) {
@@ -119,6 +144,10 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         return .cancel
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        applyPlayerOnly()
+    }
+
     /// window.open and target=_blank: pop-ups are dropped, same-site links open in place.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
@@ -133,6 +162,13 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     // MARK: Video events
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "flixPage" {
+            if let body = message.body as? [String: Any], body["type"] as? String == "players",
+               let count = (body["count"] as? NSNumber)?.intValue {
+                detectedPlayers = count
+            }
+            return
+        }
         guard let body = message.body as? [String: Any],
               let kind = body["type"] as? String,
               let time = (body["t"] as? NSNumber)?.doubleValue,
@@ -197,8 +233,140 @@ enum Scripts {
           if (isFinite(v.duration) && v.duration >= 60 && t < v.duration - 10) v.currentTime = t;
         }
       };
+      // Inside player embeds only: start the video, or press the player's
+      // own big play button if the video isn't there yet.
+      var pokes = 0;
+      var playButtons = '.jw-display-icon-display, .jw-icon-display, .vjs-big-play-button, ' +
+        '.plyr__control--overlaid, .play-button, .play-btn, .playbtn, #play-button, ' +
+        '[aria-label="Play"], [title="Play"]';
+      function poke() {
+        if (window === window.top || pokes++ > 10) return;
+        var videos = document.getElementsByTagName('video');
+        for (var i = 0; i < videos.length; i++) {
+          var v = videos[i];
+          if (!v.__flixStarted && v.paused && v.readyState >= 1) {
+            v.__flixStarted = true;
+            var p = v.play();
+            if (p && p.catch) p.catch(function () {});
+            return;
+          }
+          if (v.__flixStarted || !v.paused) return;
+        }
+        var button = document.querySelector(playButtons);
+        if (button && !button.__flixClicked && button.offsetParent !== null) {
+          button.__flixClicked = true;
+          button.click();
+        }
+        setTimeout(poke, 1500);
+      }
       scan();
       new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(poke, 1200);
+    })();
+    """#
+
+    /// Main frame only. In player-only mode, pins the page's biggest player
+    /// (iframe or video) to fill the screen and hides the rest. Also reports
+    /// how many "Player N" choices the page offers.
+    static let focus = #"""
+    (function () {
+      if (window.__flixFocusInstalled) return;
+      window.__flixFocusInstalled = true;
+      var on = window.__flixFocusDefault !== false;
+      var param = window.__flixPlayerParam || 'p';
+      var css = [
+        'html.__flix_focus, html.__flix_focus body { overflow: hidden !important; background: #000 !important; }',
+        'html.__flix_focus body > *:not(.__flix_keep) { visibility: hidden !important; }',
+        'html.__flix_focus .__flix_keep { visibility: visible !important; transform: none !important; ' +
+          'filter: none !important; perspective: none !important; contain: none !important; ' +
+          'will-change: auto !important; opacity: 1 !important; z-index: 2147483647 !important; }',
+        'html.__flix_focus .__flix_player { position: fixed !important; top: 0 !important; left: 0 !important; ' +
+          'right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; ' +
+          'max-width: none !important; max-height: none !important; min-width: 0 !important; ' +
+          'min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; ' +
+          'background: #000 !important; }'
+      ].join('\n');
+
+      function post(msg) {
+        try { window.webkit.messageHandlers.flixPage.postMessage(msg); } catch (e) {}
+      }
+      function ensureStyle() {
+        if (document.getElementById('__flix_focus_style') || !document.head) return;
+        var style = document.createElement('style');
+        style.id = '__flix_focus_style';
+        style.textContent = css;
+        document.head.appendChild(style);
+      }
+      function score(el) {
+        var src = (el.getAttribute('src') || el.currentSrc || '').toLowerCase();
+        if (/youtube|youtu\.be|vimeo/.test(src)) return 0;
+        var r = el.getBoundingClientRect();
+        if (r.width < 200 || r.height < 110) return 0;
+        var s = r.width * r.height;
+        var allow = (el.getAttribute('allow') || '') + (el.hasAttribute('allowfullscreen') ? ' fullscreen' : '');
+        if (/fullscreen|autoplay/.test(allow)) s *= 3;
+        if (/embed|player|stream|play|vid/.test(src)) s *= 2;
+        return s;
+      }
+      function pick() {
+        var best = null, bestScore = 0;
+        var els = document.querySelectorAll('iframe, video');
+        for (var i = 0; i < els.length; i++) {
+          var s = score(els[i]);
+          if (s > bestScore) { best = els[i]; bestScore = s; }
+        }
+        return best;
+      }
+      function clear() {
+        var marked = document.querySelectorAll('.__flix_player, .__flix_keep');
+        for (var i = 0; i < marked.length; i++) marked[i].classList.remove('__flix_player', '__flix_keep');
+      }
+      function countPlayers() {
+        var max = 0;
+        var els = document.querySelectorAll('a[href], button, [role="button"], li, option');
+        var hrefRe = new RegExp('[?&]' + param + '=(\\d{1,2})(?:&|$)');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i], n = 0;
+          var text = (el.textContent || '').trim();
+          var m = text.length < 24 && /^(?:player|server|source)\s*#?\s*(\d{1,2})$/i.exec(text);
+          if (m) n = parseInt(m[1], 10);
+          if (!n && el.tagName === 'A') {
+            var h = hrefRe.exec(el.getAttribute('href') || '');
+            if (h) n = parseInt(h[1], 10);
+          }
+          if (n > max) max = n;
+        }
+        return max;
+      }
+      var lastCount = -1;
+      function apply() {
+        var root = document.documentElement;
+        if (!root) return;
+        var count = countPlayers();
+        if (count !== lastCount) { lastCount = count; post({ type: 'players', count: count }); }
+        if (!on) { root.classList.remove('__flix_focus'); return; }
+        ensureStyle();
+        var best = pick();
+        if (!best) { root.classList.remove('__flix_focus'); return; }
+        if (!best.classList.contains('__flix_player')) {
+          clear();
+          best.classList.add('__flix_player', '__flix_keep');
+          for (var p = best.parentElement; p && p !== document.body && p !== root; p = p.parentElement) {
+            p.classList.add('__flix_keep');
+          }
+        }
+        root.classList.add('__flix_focus');
+      }
+      var pending = null;
+      function schedule() {
+        if (pending) return;
+        pending = setTimeout(function () { pending = null; apply(); }, 250);
+      }
+      window.__flixSetFocus = function (value) { on = !!value; apply(); };
+      apply();
+      new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+      var ticks = 0;
+      var timer = setInterval(function () { apply(); if (++ticks > 30) clearInterval(timer); }, 1000);
     })();
     """#
 }
