@@ -16,6 +16,7 @@ struct TitleDetailView: View {
     @State private var season = 1
     @State private var episodes: [Episode] = []
     @State private var loadingEpisodes = false
+    @State private var episodesFailed = false
     @State private var visit: SiteVisit?
 
     init(title: Title) {
@@ -124,6 +125,12 @@ struct TitleDetailView: View {
         }
         if loadingEpisodes && episodes.isEmpty {
             ProgressView().frame(maxWidth: .infinity)
+        } else if episodesFailed {
+            HStack {
+                Text("Couldn't load episodes.").foregroundStyle(.secondary)
+                Button("Retry") { Task { await loadSeason() } }
+            }
+            .font(.subheadline)
         }
         ForEach(episodes) { ep in
             let request = PlayRequest(title: shown, season: ep.seasonNumber, episode: ep.episodeNumber)
@@ -220,13 +227,24 @@ struct TitleDetailView: View {
         } catch {
             meta = [error.localizedDescription]
         }
+        // The season task already ran (with no seasons yet), and won't run
+        // again if the season picked above is the default one.
+        if title.type == .tv { await loadSeason() }
     }
 
     private func loadSeason() async {
         guard title.type == .tv, !seasons.isEmpty, let client = TMDB.client(userKey: tmdbKey) else { return }
+        let number = season
         loadingEpisodes = true
+        episodesFailed = false
         defer { loadingEpisodes = false }
-        episodes = (try? await client.season(title.tmdbID, season).episodes) ?? []
+        do {
+            let loaded = try await client.season(title.tmdbID, number).episodes
+            // A slower load for a season no longer picked mustn't win.
+            if season == number { episodes = loaded }
+        } catch {
+            if season == number, episodes.isEmpty { episodesFailed = true }
+        }
     }
 }
 
