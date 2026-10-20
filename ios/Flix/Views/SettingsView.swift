@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @AppStorage(Keys.tmdbKey) private var tmdbKey = ""
     @AppStorage(Keys.configURL) private var configURL = ""
+    @AppStorage(Keys.autoplayNext) private var autoplayNext = true
     @State private var visit: SiteVisit?
     @State private var confirmClear = false
 
@@ -55,6 +56,14 @@ struct SettingsView: View {
                     Text("Site links")
                 } footer: {
                     Text("Set these in domain.json under \"paths\" so Play opens the exact page. Until then Play searches the site, and the app remembers the page each time a video starts playing.")
+                }
+
+                Section {
+                    Toggle("Autoplay next episode", isOn: $autoplayNext)
+                } header: {
+                    Text("Playback")
+                } footer: {
+                    Text("Near the end of an episode, a 10-second countdown starts the next one on the same player.")
                 }
 
                 Section("Advanced") {

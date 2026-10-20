@@ -12,11 +12,11 @@
     "flixbabax.com"
   ],
   "paths": {
-    "movie": "/movie/{id}/{slug}",
+    "movie": "/movie/{id}/{slug}/watch?p=1",
     "tv": "/tv/{id}/{slug}/season/{season}?e={episode}&p=1",
     "search": "/search?q={query}",
     "player": "p",
     "players": 5
   },
-  "paths_note": "Link templates for the iOS app. Placeholders: {id} (TMDB id), {slug}, {title}, {year}, {season}, {episode}, {player}, {query}. Example episode link: /tv/213375/visionquest/season/1?e=2&p=1. \"player\" is the query parameter that picks the site's player and \"players\" how many to offer. Empty = search the site instead."
+  "paths_note": "Link templates for the iOS app. Placeholders: {id} (TMDB id), {slug}, {title}, {year}, {season}, {episode}, {player}, {query}. Examples: /tv/213375/visionquest/season/1?e=2&p=1 and /movie/1368337/the-odyssey/watch?p=1. \"player\" is the query parameter that picks the site's player and \"players\" how many to offer. Empty = search the site instead."
 }
