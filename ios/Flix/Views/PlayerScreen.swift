@@ -15,6 +15,7 @@ struct PlayerScreen: View {
     @StateObject private var web = WebController()
     @AppStorage("playerOnly") private var playerOnly = true
     @AppStorage(Keys.autoplayNext) private var autoplayNext = true
+    @AppStorage(Keys.nativeFullscreen) private var nativeFullscreen = false
     @AppStorage(Keys.tmdbKey) private var tmdbKey = ""
 
     @State private var startURL: URL?
@@ -33,17 +34,20 @@ struct PlayerScreen: View {
     @State private var countdownTask: Task<Void, Never>?
     @State private var promptedKey: String?
     @State private var showEpisodes = false
+    /// Our own fullscreen: landscape, no bar, the site's player and its controls.
+    @State private var fullscreen = false
 
     private var landscape: Bool { verticalSizeClass == .compact }
 
     var body: some View {
         VStack(spacing: 0) {
-            if !landscape { topBar }
+            if !landscape && !fullscreen { topBar }
             ZStack(alignment: .bottom) {
                 Color.black
                 if let startURL {
                     BrowserView(controller: web, startURL: startURL, rules: rules,
-                                playerOnly: playerOnly && current != nil, playerParam: site.playerParam)
+                                playerOnly: playerOnly && current != nil, playerParam: site.playerParam,
+                                nativeFullscreen: nativeFullscreen)
                 } else if started {
                     Text("Couldn't build a link to the site.").foregroundStyle(.secondary)
                 } else {
@@ -64,7 +68,7 @@ struct PlayerScreen: View {
                 }
             }
             .overlay(alignment: .topLeading) {
-                if landscape { floatingControls }
+                if landscape || fullscreen { floatingControls }
             }
         }
         .background(Color.black.ignoresSafeArea())
@@ -108,6 +112,7 @@ struct PlayerScreen: View {
             }
             if current != nil { playerMenu }
             if current?.title.type == .tv { episodeButtons }
+            fullscreenButton
             moreMenu
         }
         .font(.body.weight(.semibold))
@@ -123,6 +128,7 @@ struct PlayerScreen: View {
             closeButton
             if current != nil { playerMenu }
             if current?.title.type == .tv { episodeButtons }
+            fullscreenButton
             moreMenu
         }
         .font(.body.weight(.semibold))
@@ -142,6 +148,21 @@ struct PlayerScreen: View {
             Button { go(to: next) } label: { Image(systemName: "forward.end.fill") }
                 .accessibilityLabel("Next episode, \(next.episodeLabel ?? "")")
         }
+    }
+
+    private var fullscreenButton: some View {
+        Button {
+            setFullscreen(!fullscreen)
+        } label: {
+            Image(systemName: fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+        }
+        .accessibilityLabel(fullscreen ? "Exit full screen" : "Full screen")
+    }
+
+    private func setFullscreen(_ on: Bool) {
+        guard on != fullscreen else { return }
+        withAnimation { fullscreen = on }
+        Orientation.rotate(to: on ? .landscapeRight : .portrait)
     }
 
     private var closeButton: some View {
@@ -268,6 +289,7 @@ struct PlayerScreen: View {
         web.isAllowed = { url in site.isSiteURL(url) }
         web.onVideo = { event in handle(event) }
         web.onURLChange = { url in urlChanged(url) }
+        web.onFullscreen = { exitOnly in setFullscreen(exitOnly ? false : !fullscreen) }
 
         if let request = current {
             Library.markWatched(request, progress: Library.existingProgress(key: request.progressKey, in: context),
@@ -469,9 +491,11 @@ private struct BrowserView: UIViewRepresentable {
     let rules: WKContentRuleList?
     let playerOnly: Bool
     let playerParam: String
+    let nativeFullscreen: Bool
 
     func makeUIView(context: Context) -> WKWebView {
-        controller.makeWebView(startURL: startURL, rules: rules, playerOnly: playerOnly, playerParam: playerParam)
+        controller.makeWebView(startURL: startURL, rules: rules, playerOnly: playerOnly, playerParam: playerParam,
+                               nativeFullscreen: nativeFullscreen)
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}

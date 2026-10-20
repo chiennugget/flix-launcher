@@ -160,6 +160,7 @@ Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player"
 | "TMDB rejected the API key" | Re-copy the key from themoviedb.org. Paste the API Key *or* the Read Access Token, not both. |
 | Play opens a search or 404 page | Pick the right result. It's remembered after the first play. Better: set `paths` (see above). |
 | Play opens the wrong page every time | In the player: **⋯ → Forget saved page**, then play again. |
+| Subtitles show twice, or no captions button in fullscreen | Use the player's own fullscreen button or Flix's ⤢ button; it keeps the site's player and its captions button. Make sure **Settings → Playback → Use iPhone fullscreen player** is off. |
 | Video doesn't start / black screen | Tap **P1 ▾** and try another player. If the screen stays black, use **⋯ → Show full page**. |
 | Doesn't resume where I left off | The player may hide its video from the app; the episode is still remembered. |
 | Site won't load | **Settings → Check again**. If the address is wrong, use the manual fallback above. |
