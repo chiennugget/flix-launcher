@@ -80,6 +80,50 @@ Launched from the Home Screen, it auto-opens Brave at the current address. It ca
 
 ---
 
+## Part 6 — The Flix iOS app (replaces Parts 2–5)
+
+A real app with a Netflix-style home screen, My List, Continue Watching and resume points. It opens the site inside itself with pop-ups and ads blocked and rotation handled, so Brave and the Shortcut become a backup.
+
+GitHub builds the app every time `ios/` changes and posts it under **Releases**. You install it with **SideStore**, which signs it with your own free Apple ID. No Mac needed.
+
+**1. Install SideStore (one-time, about 20 min, needs a computer once).** Follow the official guide at [docs.sidestore.io](https://docs.sidestore.io). It walks through pairing your phone and installing SideStore itself. After that, everything happens on the phone.
+
+**2. Add the Flix source.** In SideStore: **Sources** → **+** → paste:
+
+```
+https://github.com/USERNAME/flix-launcher/releases/latest/download/apps.json
+```
+
+Then open the source and install **Flix**. New builds show up as updates. SideStore re-signs apps every 7 days in the background; open it now and then so it can.
+
+*Without the source:* download `Flix.ipa` from the newest release on your phone, then in SideStore go to **My Apps** → **+** and pick it.
+
+**3. Add a TMDB key (free).** Posters, descriptions, episodes and search come from The Movie Database. Sign up at [themoviedb.org](https://www.themoviedb.org/signup), go to **Settings** → **API**, request a key (personal use), and paste either the *API Key* or the *Read Access Token* into **Flix → Settings**.
+
+> You could instead save it as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) so it's built into the app. Because this repo is public, anyone could pull the key out of the release, so typing it into the app is better.
+
+**4. Make Play open the exact page (optional, recommended).** Open any movie and any episode on the site and look at their addresses. If they contain the TMDB number (the one in a themoviedb.org address, e.g. `themoviedb.org/movie/550` → `550`), edit `paths` in `domain.json`:
+
+```json
+"paths": {
+  "movie": "/movie/{id}",
+  "tv": "/tv/{id}/{season}/{episode}",
+  "search": "/search?q={query}"
+}
+```
+
+Use whatever shape the site actually uses. Other placeholders: `{slug}` (`the-dark-knight`), `{title}`, `{year}`. Until `movie`/`tv` are set, Play runs a site search for the title. Either way, **the app remembers the page the first time a video plays**, so next time Play goes straight there. If it remembered the wrong page, use **⋯ → Forget saved page** in the player.
+
+**How it behaves**
+
+- **Address:** reads `domain.json` on launch. If that address looks dead, it follows the mirrors itself, the same way the checker does. **Settings** shows where the address came from.
+- **Blocking:** known ad and pop-under networks are blocked. New windows are dropped, and the page can't redirect you off the site. The green shield shows how many were stopped.
+- **Resume:** while a video plays, its position is saved every few seconds. Opening the same movie or episode again jumps back to it. This works for most players; if a player hides its video, the app still remembers which episode you were on.
+- **Rotation:** the app stays portrait in menus and rotates freely while the site is open.
+- **Backup:** **⋯ → Open in Brave** opens the current page in Brave.
+
+---
+
 ## When the address changes
 
 **Usually: nothing to do.** The checker runs every 4 hours. If you notice the site moved before it catches up, open **Actions** → **Check domain** → **Run workflow**.

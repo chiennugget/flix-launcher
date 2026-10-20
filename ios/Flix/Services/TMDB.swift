@@ -74,7 +74,7 @@ struct TMDBPage: Decodable {
     let results: [TMDBItem]
 
     func titles(defaultType: MediaType?) -> [Title] {
-        results.compactMap { $0.title(defaultType: defaultType) }
+        results.compactMap { $0.asTitle(defaultType: defaultType) }
     }
 }
 
@@ -90,7 +90,7 @@ struct TMDBItem: Decodable {
     let firstAirDate: String?
     let voteAverage: Double?
 
-    func title(defaultType: MediaType?) -> Title? {
+    func asTitle(defaultType: MediaType?) -> Title? {
         guard let type = mediaType.flatMap(MediaType.init(rawValue:)) ?? defaultType,
               let label = title ?? name else { return nil }
         let date = releaseDate ?? firstAirDate ?? ""

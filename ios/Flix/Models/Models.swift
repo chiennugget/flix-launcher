@@ -174,7 +174,7 @@ enum Library {
 
     /// Records that a request was opened or played, for Continue Watching.
     static func markWatched(_ request: PlayRequest, progress: WatchProgress?, in context: ModelContext) {
-        let item = item(for: request.title, in: context)
+        let item = Self.item(for: request.title, in: context)
         item.inHistory = true
         item.lastWatchedAt = .now
         item.lastSeason = request.season

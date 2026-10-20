@@ -37,6 +37,7 @@ final class SiteService: ObservableObject {
     private let defaults = UserDefaults.standard
 
     init() {
+        let defaults = UserDefaults.standard
         domain = defaults.string(forKey: "site.domain") ?? "flixbaba.mov"
         name = defaults.string(forKey: "site.name") ?? "flixbaba"
         mirrors = defaults.stringArray(forKey: "site.mirrors") ?? []

@@ -20,7 +20,7 @@ struct PlayerScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
+            topBar
             ZStack(alignment: .bottom) {
                 Color.black
                 if let startURL {
@@ -52,7 +52,7 @@ struct PlayerScreen: View {
         }
     }
 
-    private var toolbar: some View {
+    private var topBar: some View {
         HStack(spacing: 20) {
             Button { dismiss() } label: { Image(systemName: "xmark") }
                 .accessibilityLabel("Close")
