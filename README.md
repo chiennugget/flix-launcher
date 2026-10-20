@@ -74,12 +74,13 @@ Posters, descriptions, episode lists and search come from The Movie Database (TM
 ## Using the app
 
 - **Home:** Continue Watching, My List, Trending, Popular, Top Rated and genre rows. Pull down to refresh.
-- **Title page:** **Play** / **Resume**, **My List**, and for shows, a season picker and episode list with progress bars.
+- **Title page:** **Play** / **Resume**, **My List**, and for movies **Mark Watched**. Shows get a season picker and an episode list with progress bars; **long-press an episode** to mark it watched or unwatched, or use **⋯** next to the season picker to mark a whole season.
 - **Search** tab: searches TMDB. It also has a *Search on the site* button.
 - **🌐** (top right of Home): opens the site's home page.
 - **In the player:** Play opens the episode with **only the video player** on screen and tries to start it.
   - **P1 ▾** switches between the site's players (Player 1, 2, 3…). If nothing plays within about 15 seconds, a **Try Player 2** button pops up. The app remembers which player worked for each show and starts there next time.
   - **✕** closes the player, **‹** goes back, **↻** reloads. In landscape these float over the video.
+  - **Up next:** 15 seconds before an episode ends, a 10-second countdown starts the next one on the same player. Tap **Play now** or **✕**. Turn it off in **Settings → Playback**.
   - The green **shield** counts pop-ups and redirects that were blocked.
   - **⋯** has **Show full page** (the whole flixbaba page, e.g. to pick episodes there), **Open in Brave**, **Copy link** and **Forget saved page**.
 

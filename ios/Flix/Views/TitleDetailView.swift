@@ -17,6 +17,7 @@ struct TitleDetailView: View {
     @State private var episodes: [Episode] = []
     @State private var loadingEpisodes = false
     @State private var episodesFailed = false
+    @State private var runtime: Int?
     @State private var visit: SiteVisit?
 
     init(title: Title) {
@@ -95,13 +96,27 @@ struct TitleDetailView: View {
                 Text(Format.remaining(saved.duration - saved.position)).font(.caption).foregroundStyle(.secondary)
             }
 
-            Button {
-                toggleWatchlist()
-            } label: {
-                Label(item?.inWatchlist == true ? "In My List" : "My List",
-                      systemImage: item?.inWatchlist == true ? "checkmark" : "plus")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+            HStack(spacing: 10) {
+                Button {
+                    toggleWatchlist()
+                } label: {
+                    Label(item?.inWatchlist == true ? "In My List" : "My List",
+                          systemImage: item?.inWatchlist == true ? "checkmark" : "plus")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                if title.type == .movie {
+                    let movie = PlayRequest(title: shown)
+                    let done = progressByKey[movie.progressKey]?.isFinished == true
+                    Button {
+                        Library.setWatched(movie, !done, runtimeMinutes: runtime, in: context)
+                    } label: {
+                        Label(done ? "Watched" : "Mark Watched",
+                              systemImage: done ? "checkmark.circle.fill" : "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                }
             }
             .buttonStyle(.bordered)
             .tint(.white)
@@ -120,6 +135,22 @@ struct TitleDetailView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                Menu {
+                    Button {
+                        markSeason(true)
+                    } label: {
+                        Label("Mark season as watched", systemImage: "checkmark.circle")
+                    }
+                    Button {
+                        markSeason(false)
+                    } label: {
+                        Label("Mark season as unwatched", systemImage: "eye.slash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle").font(.title3)
+                }
+                .disabled(episodes.isEmpty)
+                .accessibilityLabel("Season options")
             }
             .padding(.top, 8)
         }
@@ -140,6 +171,20 @@ struct TitleDetailView: View {
                 EpisodeRow(episode: ep, progress: progressByKey[request.progressKey])
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                let done = progressByKey[request.progressKey]?.isFinished == true
+                Button {
+                    play(request)
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                }
+                Button {
+                    Library.setWatched(request, !done, runtimeMinutes: ep.runtime, in: context)
+                } label: {
+                    Label(done ? "Mark as unwatched" : "Mark as watched",
+                          systemImage: done ? "eye.slash" : "checkmark.circle")
+                }
+            }
         }
     }
 
@@ -155,12 +200,7 @@ struct TitleDetailView: View {
         }
         let last = PlayRequest(title: shown, season: s, episode: e)
         guard progressByKey[last.progressKey]?.isFinished == true else { return last }
-        let count = seasons.first { $0.seasonNumber == s }?.episodeCount ?? Int.max
-        if e < count { return PlayRequest(title: shown, season: s, episode: e + 1) }
-        if seasons.contains(where: { $0.seasonNumber == s + 1 }) {
-            return PlayRequest(title: shown, season: s + 1, episode: 1)
-        }
-        return last
+        return last.next(in: seasons) ?? last
     }
 
     private func playLabel(_ request: PlayRequest, resuming: Bool) -> String {
@@ -171,6 +211,21 @@ struct TitleDetailView: View {
 
     private func play(_ request: PlayRequest) {
         visit = SiteVisit(request: request)
+    }
+
+    private func markSeason(_ watched: Bool) {
+        let requests = episodes.map { PlayRequest(title: shown, season: $0.seasonNumber, episode: $0.episodeNumber) }
+        for (ep, request) in zip(episodes, requests) {
+            Library.setWatched(request, watched, runtimeMinutes: ep.runtime, updateHistory: false, in: context)
+        }
+        // Continue Watching follows the season's last episode, so Play moves on.
+        if watched, let last = requests.last {
+            Library.markWatched(last, progress: Library.existingProgress(key: last.progressKey, in: context),
+                                in: context)
+        } else if !watched, let item, item.inHistory, item.lastSeason == season, let first = requests.first {
+            Library.markWatched(first, progress: Library.existingProgress(key: first.progressKey, in: context),
+                                in: context)
+        }
     }
 
     private func toggleWatchlist() {
@@ -194,6 +249,7 @@ struct TitleDetailView: View {
                 t.backdropPath = m.backdropPath ?? title.backdropPath
                 detail = t
                 tagline = m.tagline
+                runtime = m.runtime
                 let parts: [String?] = [m.releaseDate.map { String($0.prefix(4)) },
                         m.runtime.flatMap { $0 > 0 ? "\($0 / 60)h \($0 % 60)m" : nil },
                         m.voteAverage.flatMap { $0 > 0 ? String(format: "★ %.1f", $0) : nil },

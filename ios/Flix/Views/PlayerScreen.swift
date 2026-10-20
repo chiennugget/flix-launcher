@@ -14,6 +14,8 @@ struct PlayerScreen: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @StateObject private var web = WebController()
     @AppStorage("playerOnly") private var playerOnly = true
+    @AppStorage(Keys.autoplayNext) private var autoplayNext = true
+    @AppStorage(Keys.tmdbKey) private var tmdbKey = ""
 
     @State private var startURL: URL?
     @State private var rules: WKContentRuleList?
@@ -25,6 +27,11 @@ struct PlayerScreen: View {
     @State private var sawVideo = false
     @State private var suggestedPlayer: Int?
     @State private var fallbackTask: Task<Void, Never>?
+    @State private var seasons: [SeasonSummary] = []
+    @State private var upNext: PlayRequest?
+    @State private var countdown = 0
+    @State private var countdownTask: Task<Void, Never>?
+    @State private var promptedKey: String?
 
     private var landscape: Bool { verticalSizeClass == .compact }
 
@@ -41,7 +48,9 @@ struct PlayerScreen: View {
                 } else {
                     ProgressView().tint(.white)
                 }
-                if let next = suggestedPlayer {
+                if let upNext {
+                    upNextCard(upNext)
+                } else if let next = suggestedPlayer {
                     fallbackBanner(next)
                 } else if let toast {
                     Text(toast)
@@ -64,6 +73,7 @@ struct PlayerScreen: View {
         .onAppear { Orientation.allow(.allButUpsideDown) }
         .onDisappear {
             fallbackTask?.cancel()
+            countdownTask?.cancel()
             web.teardown()
             Orientation.allow(.portrait)
         }
@@ -201,6 +211,31 @@ struct PlayerScreen: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
+    private func upNextCard(_ next: PlayRequest) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Up next · \(next.episodeLabel ?? "")").font(.footnote.weight(.bold))
+                Text("Playing in \(countdown)s").font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Play now") { playNext() }
+                .font(.footnote.weight(.bold))
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.accent)
+            Button {
+                cancelUpNext()
+            } label: {
+                Image(systemName: "xmark").font(.footnote.weight(.bold))
+            }
+            .accessibilityLabel("Cancel autoplay")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.bottom, 24)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
     // MARK: Setup
 
     private func start() async {
@@ -226,6 +261,13 @@ struct PlayerScreen: View {
         }
         startURL = url
         started = true
+
+        // Episode counts, so autoplay knows what comes next.
+        if let request = current, request.title.type == .tv, let client = TMDB.client(userKey: tmdbKey) {
+            let all = (try? await client.show(request.title.tmdbID).seasons) ?? []
+            let regular = all.filter { $0.seasonNumber > 0 }
+            seasons = regular.isEmpty ? all : regular
+        }
     }
 
     /// Remembered page first, then domain.json's template, then a site search.
@@ -263,6 +305,41 @@ struct PlayerScreen: View {
         }
     }
 
+    // MARK: Autoplay next episode
+
+    private func startUpNext(after request: PlayRequest) {
+        guard autoplayNext, promptedKey != request.progressKey,
+              let next = request.next(in: seasons) else { return }
+        promptedKey = request.progressKey
+        countdownTask?.cancel()
+        countdown = 10
+        withAnimation { upNext = next }
+        countdownTask = Task {
+            while countdown > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                countdown -= 1
+            }
+            playNext()
+        }
+    }
+
+    private func playNext() {
+        guard let next = upNext else { return }
+        countdownTask?.cancel()
+        withAnimation { upNext = nil }
+        current = next
+        Library.markWatched(next, progress: Library.existingProgress(key: next.progressKey, in: context), in: context)
+        guard let link = link(for: next) else { return }
+        web.load(site.url(link, player: player))
+        armFallback()
+    }
+
+    private func cancelUpNext() {
+        countdownTask?.cancel()
+        withAnimation { upNext = nil }
+    }
+
     // MARK: Playback events
 
     private func handle(_ event: VideoEvent) {
@@ -292,6 +369,11 @@ struct PlayerScreen: View {
             progress.position = event.kind == "ended" ? event.duration : event.time
             progress.duration = event.duration
             progress.updatedAt = .now
+            // Into the last 15 seconds (or the credits ran out): offer the next
+            // one. Under 10 minutes is more likely an ad than an episode.
+            if event.duration >= 600, event.kind == "ended" || event.duration - event.time <= 15 {
+                startUpNext(after: request)
+            }
         }
 
         // The first time something plays, remember the page it played on.

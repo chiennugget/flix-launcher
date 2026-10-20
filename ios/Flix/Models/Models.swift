@@ -40,6 +40,18 @@ struct PlayRequest: Hashable {
         [title.name, episodeLabel].compactMap { $0 }.joined(separator: " · ")
     }
 
+    /// The episode after this one, or nil at the end of the show (or when the
+    /// seasons aren't known).
+    func next(in seasons: [SeasonSummary]) -> PlayRequest? {
+        guard let season, let episode else { return nil }
+        let count = seasons.first { $0.seasonNumber == season }?.episodeCount ?? 0
+        if episode < count { return PlayRequest(title: title, season: season, episode: episode + 1) }
+        if seasons.contains(where: { $0.seasonNumber == season + 1 }) {
+            return PlayRequest(title: title, season: season + 1, episode: 1)
+        }
+        return nil
+    }
+
     /// Values for the {placeholders} in domain.json's link templates.
     var variables: [String: String] {
         let slug = title.name.lowercased()
@@ -170,6 +182,28 @@ enum Library {
                                      season: request.season, episode: request.episode)
         context.insert(progress)
         return progress
+    }
+
+    /// Marks a movie or episode watched (or not) without playing it.
+    /// `updateHistory: false` skips Continue Watching, for marking a batch.
+    static func setWatched(_ request: PlayRequest, _ watched: Bool, runtimeMinutes: Int? = nil,
+                           updateHistory: Bool = true, in context: ModelContext) {
+        let progress = Self.progress(for: request, in: context)
+        if watched {
+            if progress.duration <= 0 { progress.duration = Double(max(runtimeMinutes ?? 0, 1) * 60) }
+            progress.position = progress.duration
+        } else {
+            progress.position = 0
+        }
+        progress.updatedAt = .now
+        guard updateHistory else { return }
+        let item = Self.item(for: request.title, in: context)
+        let isLast = item.lastSeason == request.season && item.lastEpisode == request.episode
+        // Watched: Play moves on to the next episode. Unwatched: only refresh
+        // the Continue Watching label if this was the one it pointed at.
+        if watched || (item.inHistory && isLast) {
+            markWatched(request, progress: progress, in: context)
+        }
     }
 
     /// Records that a request was opened or played, for Continue Watching.

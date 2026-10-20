@@ -64,6 +64,7 @@ enum Theme {
 enum Keys {
     static let tmdbKey = "tmdbKey"
     static let configURL = "configURL"
+    static let autoplayNext = "autoplayNext"
     static let defaultConfigURL = "https://chiennugget.github.io/flix-launcher/domain.json"
     static let rawConfigURL = "https://raw.githubusercontent.com/chiennugget/flix-launcher/main/domain.json"
 }
