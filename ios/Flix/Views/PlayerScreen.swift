@@ -36,6 +36,9 @@ struct PlayerScreen: View {
     @State private var showEpisodes = false
     /// Our own fullscreen: landscape, no bar, the site's player and its controls.
     @State private var fullscreen = false
+    /// Floating controls fade out on their own and come back on a tap.
+    @State private var controlsVisible = true
+    @State private var hideControlsTask: Task<Void, Never>?
 
     private var landscape: Bool { verticalSizeClass == .compact }
 
@@ -68,7 +71,12 @@ struct PlayerScreen: View {
                 }
             }
             .overlay(alignment: .topLeading) {
-                if landscape || fullscreen { floatingControls }
+                if landscape || fullscreen {
+                    floatingControls
+                        .opacity(controlsVisible ? 1 : 0)
+                        .allowsHitTesting(controlsVisible)
+                        .simultaneousGesture(TapGesture().onEnded { showControls() })
+                }
             }
         }
         .background(Color.black.ignoresSafeArea())
@@ -84,9 +92,11 @@ struct PlayerScreen: View {
             }
         }
         .onAppear { Orientation.allow(.allButUpsideDown) }
+        .onChange(of: landscape || fullscreen, initial: true) { showControls() }
         .onDisappear {
             fallbackTask?.cancel()
             countdownTask?.cancel()
+            hideControlsTask?.cancel()
             web.teardown()
             Orientation.allow(.portrait)
         }
@@ -157,6 +167,25 @@ struct PlayerScreen: View {
             Image(systemName: fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
         }
         .accessibilityLabel(fullscreen ? "Exit full screen" : "Full screen")
+    }
+
+    private func showControls() {
+        withAnimation(.easeOut(duration: 0.2)) { controlsVisible = true }
+        hideControlsTask?.cancel()
+        hideControlsTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) { controlsVisible = false }
+        }
+    }
+
+    private func toggleControls() {
+        if controlsVisible {
+            hideControlsTask?.cancel()
+            withAnimation(.easeIn(duration: 0.2)) { controlsVisible = false }
+        } else {
+            showControls()
+        }
     }
 
     private func setFullscreen(_ on: Bool) {
@@ -290,6 +319,7 @@ struct PlayerScreen: View {
         web.onVideo = { event in handle(event) }
         web.onURLChange = { url in urlChanged(url) }
         web.onFullscreen = { exitOnly in setFullscreen(exitOnly ? false : !fullscreen) }
+        web.onTap = { toggleControls() }
 
         if let request = current {
             Library.markWatched(request, progress: Library.existingProgress(key: request.progressKey, in: context),
