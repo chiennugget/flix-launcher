@@ -1,19 +1,20 @@
 {
-  "domain": "flixbaba.mov",
-  "pinned": false,
-  "updated": "2026-10-19T21:02:19Z",
+  "domain": "flixbaba.best",
+  "pinned": true,
+  "updated": "2026-10-20T13:51:52Z",
   "note": "Manual override: set \"domain\" to the new address and \"pinned\" to true. Set \"pinned\" back to false to let the auto-checker take over again.",
   "name": "flixbaba",
   "mirrors": [
+    "flixbaba.best",
+    "flixbaba.mov",
     "flixbaba.com",
     "flixbaba.cx",
-    "flixbabax.com",
-    "flixbaba.mov"
+    "flixbabax.com"
   ],
   "paths": {
-    "movie": "",
-    "tv": "",
+    "movie": "/movie/{id}/{slug}",
+    "tv": "/tv/{id}/{slug}/season/{season}?e={episode}&p=1",
     "search": "/search?q={query}"
   },
-  "paths_note": "Link templates for the iOS app. Placeholders: {id} (TMDB id), {slug}, {title}, {year}, {season}, {episode}, {query}. Example: \"movie\": \"/movie/{id}\", \"tv\": \"/tv/{id}/{season}/{episode}\". Empty = search the site instead."
+  "paths_note": "Link templates for the iOS app. Placeholders: {id} (TMDB id), {slug}, {title}, {year}, {season}, {episode}, {query}. Example episode link: /tv/213375/visionquest/season/1?e=2&p=1. Empty = search the site instead."
 }

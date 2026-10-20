@@ -32,13 +32,13 @@ final class SiteService: ObservableObject {
     @Published private(set) var status = "Finding the current address…"
     @Published private(set) var checking = false
 
-    static let builtInMirrors = ["flixbaba.com", "flixbaba.cx", "flixbabax.com", "flixbaba.mov"]
+    static let builtInMirrors = ["flixbaba.best", "flixbaba.mov", "flixbaba.com", "flixbaba.cx", "flixbabax.com"]
     private var mirrors: [String]
     private let defaults = UserDefaults.standard
 
     init() {
         let defaults = UserDefaults.standard
-        domain = defaults.string(forKey: "site.domain") ?? "flixbaba.mov"
+        domain = defaults.string(forKey: "site.domain") ?? "flixbaba.best"
         name = defaults.string(forKey: "site.name") ?? "flixbaba"
         mirrors = defaults.stringArray(forKey: "site.mirrors") ?? []
         updated = defaults.object(forKey: "site.updated") as? Date
