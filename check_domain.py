@@ -27,6 +27,7 @@ MIRRORS = [
     "flixbaba.cx",
     "flixbabax.com",
     "flixbaba.mov",
+    "flixbaba.best",
 ]
 
 NAME = "flixbaba"
