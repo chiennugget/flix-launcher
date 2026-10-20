@@ -1,108 +1,103 @@
-# Flix launcher — setup guide
+# Flix — setup guide
 
-One home screen icon that finds flixbaba's current address, unlocks rotation, and opens it in Brave with ads blocked. When you close Brave, portrait lock turns back on.
+**Flix** is an iPhone app that gives flixbaba a Netflix-style home screen: posters, search, **My List**, **Continue Watching** and resume points. It finds the site's current address by itself, blocks pop-ups and ads, and rotates for video. You don't need Brave or Shortcuts.
 
 **How it fits together**
 
-- **GitHub** hosts a tiny web app plus `domain.json`, the file that holds the current address.
-- **A checker** runs on GitHub every 4 hours, follows the "now available at…" banners and redirects, and updates `domain.json` when the site moves.
-- **Your Shortcut** reads `domain.json`, turns rotation lock off, and opens the site in Brave.
-- **An automation** turns rotation lock back on when Brave closes.
+- **GitHub** (this repo) holds `domain.json`, the file with the site's current address.
+- **A checker** runs on GitHub every 4 hours. It follows the "now available at…" banners and redirects, and updates `domain.json` when the site moves.
+- **GitHub Actions** builds the app whenever its code in `ios/` changes and posts it under **Releases**.
+- **SideStore** installs the app on your iPhone and keeps it signed with your own free Apple ID. No Mac needed.
+- **The app** reads `domain.json`. If that address looks dead, it checks the mirrors itself.
 
-Throughout this guide, replace `USERNAME` with your GitHub username.
-
----
-
-## Part 1 — GitHub (about 10 min, easiest on a computer)
-
-1. **Create the repo.** On github.com: **+** → **New repository** → name it `flix-launcher` → **Public** → **Create repository**.
-2. **Upload the files.** Click **uploading an existing file**, then drag in everything from the unzipped folder: `index.html`, `domain.json`, `manifest.webmanifest`, `icon-180.png`, `icon-512.png`, `check_domain.py`, `README.md`. Click **Commit changes**.
-3. **Add the checker workflow.** The `.github` folder is hidden on most computers, so create it by hand: **Add file** → **Create new file** → type the name `.github/workflows/check-domain.yml` (the slashes make the folders) → paste in the contents of that file from the zip → **Commit changes**.
-4. **Turn on the website.** **Settings** → **Pages** → under *Build and deployment*, Source: **Deploy from a branch**, Branch: **main**, folder **/ (root)** → **Save**. After a minute or two, the page is live at `https://USERNAME.github.io/flix-launcher/`.
-5. **Test the checker once.** **Actions** tab → enable workflows if asked → **Check domain** → **Run workflow**. It should finish green with "Saved address is still the live site."
-
-> If the run fails with a permission error on `git push`: **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write permissions** → **Save**, then run it again.
+| Link | Address |
+|---|---|
+| This repo | `https://github.com/chiennugget/flix-launcher` |
+| Current address file | `https://chiennugget.github.io/flix-launcher/domain.json` |
+| SideStore source | `https://github.com/chiennugget/flix-launcher/releases/latest/download/apps.json` |
 
 ---
 
-## Part 2 — Brave (2 min, on your iPhone)
+## Part 1 — Install SideStore (one time, ~15 min, needs a computer once)
 
-1. Install **Brave** from the App Store if you don't have it.
-2. In Brave: **⋯** → **Settings** → **Shields & Privacy**:
-   - **Trackers & ads blocking** → **Aggressive**
-   - **Block Pop-ups** → **On**
-3. Leave **Block Scripts** off. It breaks the video player.
+SideStore is the app that installs Flix. The first install needs a computer: Windows, Mac or Linux, and a friend's is fine. After that, everything happens on the phone.
 
----
+**On the iPhone first**
 
-## Part 3 — The Shortcut (5 min, on your iPhone)
+1. Make sure the phone has a **passcode**. The next step fails without one.
+2. Install **LocalDevVPN** from the App Store. SideStore uses it to talk to your phone. It's a local connection, not a real VPN service, and your traffic doesn't go anywhere.
 
-Open **Shortcuts** → **+** (new shortcut). Add these actions in order (tap the search bar at the bottom to find each one):
+**On the computer**
 
-| # | Action | Set it to |
-|---|---|---|
-| 1 | **Set Orientation Lock** | Tap *Toggle* → change to **Turn**, set to **Off** |
-| 2 | **URL** | `https://USERNAME.github.io/flix-launcher/domain.json` |
-| 3 | **Get Contents of URL** | (leave as is; it uses the URL above) |
-| 4 | **Get Dictionary Value** | Get **Value** for key `domain` in *Contents of URL* |
-| 5 | **Text** | `brave://open-url?url=https://` then insert the **Dictionary Value** variable, then `/` |
-| 6 | **Open URLs** | (uses the Text above) |
+3. Download **iloader** from its official page, [github.com/nab138/iloader](https://github.com/nab138/iloader) → **Releases**, picking the file for your computer.
+   - **Windows:** install **iTunes** from apple.com first (iloader needs its phone driver).
+   - **Mac:** nothing extra.
+   - **Linux:** install `usbmuxd` if it isn't there already.
+4. Plug the iPhone in with a cable and tap **Trust** on the phone.
+5. Open iloader → sign in with your **Apple ID** → choose **Install SideStore**. It installs SideStore and sets up the files it needs to connect to your phone.
 
-Then:
+**Back on the iPhone (unplug now)**
 
-1. Rename the shortcut (tap the name at the top) to **Flix**.
-2. Tap the **ⓘ** / share button → **Add to Home Screen**. Tap the icon to change it if you like (you can pick `icon-180.png` saved to Photos).
-3. Run it once. Allow the permission prompts (accessing `github.io`, opening Brave) and choose **Always Allow** so it doesn't ask again.
+6. **Settings** → **Privacy & Security** → **Developer Mode** → **On**. The phone restarts; after it does, tap **Turn On** to confirm.
+7. **Settings** → **General** → **VPN & Device Management** → tap your Apple ID email → **Trust**.
+8. Open **LocalDevVPN** → **Connect**. Then open **SideStore**, allow the prompts it asks for, and sign in with your Apple ID under its **Settings** tab.
 
 ---
 
-## Part 4 — Re-lock rotation when you're done (2 min)
+## Part 2 — Install Flix (2 min, on your iPhone)
 
-**Shortcuts** → **Automation** tab → **+** → **App**:
+1. Connect **LocalDevVPN**, then open **SideStore** → **Sources** → **+** → paste:
 
-1. **Choose** → **Brave** → **Done**.
-2. Tick **Is Closed** only (untick *Is Opened*).
-3. Select **Run Immediately** and turn off *Notify When Run*.
-4. **Next** → **New Blank Automation** → add **Set Orientation Lock** → **Turn** → **On** → **Done**.
+   ```
+   https://github.com/chiennugget/flix-launcher/releases/latest/download/apps.json
+   ```
 
-"Closed" means leaving Brave (going to the home screen or another app), so portrait lock comes back as soon as you leave.
+2. Open the **Flix** source → **Get**. Flix appears on your home screen with the red play icon.
 
----
-
-## Part 5 (optional) — The web app icon
-
-The Shortcut is your main icon. The web app is a backup that shows the current address and has buttons to open it in Brave:
-
-1. In **Safari**, open `https://USERNAME.github.io/flix-launcher/`
-2. **Share** → **Add to Home Screen**. It gets the red play icon.
-
-Launched from the Home Screen, it auto-opens Brave at the current address. It can't unlock rotation (only Shortcuts can), so use it when you just want to check the address.
+*If adding the source fails:* in Safari, open the [newest release](https://github.com/chiennugget/flix-launcher/releases/latest) and download **Flix.ipa**. Then in SideStore go to **My Apps** → **+** and pick the file from Downloads.
 
 ---
 
-## Part 6 — The Flix iOS app (replaces Parts 2–5)
+## Part 3 — Add a free movie-info key (3 min)
 
-A real app with a Netflix-style home screen, My List, Continue Watching and resume points. It opens the site inside itself with pop-ups and ads blocked and rotation handled, so Brave and the Shortcut become a backup.
+Posters, descriptions, episode lists and search come from The Movie Database (TMDB).
 
-GitHub builds the app every time `ios/` changes and posts it under **Releases**. You install it with **SideStore**, which signs it with your own free Apple ID. No Mac needed.
+1. Sign up at [themoviedb.org](https://www.themoviedb.org/signup) and confirm your email.
+2. Go to **Settings** → **API** → **Create** → **Developer**, and fill in the short form (personal use).
+3. Copy the **API Key** or the **API Read Access Token**. Either one works.
+4. In Flix: **Settings** tab → paste it into **Movie info (TMDB)**. The home screen fills with rows.
 
-**1. Install SideStore (one-time, about 20 min, needs a computer once).** Follow the official guide at [docs.sidestore.io](https://docs.sidestore.io). It walks through pairing your phone and installing SideStore itself. After that, everything happens on the phone.
+> You could instead save it as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) so it's built into the app. Because this repo is public, anyone could pull the key out of a release, so typing it into the app is better.
 
-**2. Add the Flix source.** In SideStore: **Sources** → **+** → paste:
+---
 
-```
-https://github.com/USERNAME/flix-launcher/releases/latest/download/apps.json
-```
+## Using the app
 
-Then open the source and install **Flix**. New builds show up as updates. SideStore re-signs apps every 7 days in the background; open it now and then so it can.
+- **Home:** Continue Watching, My List, Trending, Popular, Top Rated and genre rows. Pull down to refresh.
+- **Title page:** **Play** / **Resume**, **My List**, and for shows, a season picker and episode list with progress bars.
+- **Search** tab: searches TMDB. It also has a *Search on the site* button.
+- **🌐** (top right of Home): opens the site's home page.
+- **In the player:**
+  - **✕** closes the player.
+  - **‹ ›** go back and forward, and **↻** reloads.
+  - The green **shield** counts pop-ups and redirects that were blocked.
+  - **⋯** has **Open in Brave**, **Copy link** and **Forget saved page**.
 
-*Without the source:* download `Flix.ipa` from the newest release on your phone, then in SideStore go to **My Apps** → **+** and pick it.
+**What happens behind the scenes**
 
-**3. Add a TMDB key (free).** Posters, descriptions, episodes and search come from The Movie Database. Sign up at [themoviedb.org](https://www.themoviedb.org/signup), go to **Settings** → **API**, request a key (personal use), and paste either the *API Key* or the *Read Access Token* into **Flix → Settings**.
+- **Address:** checked on every launch. **Settings → Site** shows the address and where it came from. Tap **Check again** to re-run it.
+- **Blocking:** known ad and pop-under networks are blocked. New windows are dropped, and the page can't redirect you off the site.
+- **Resume:** while a video plays, its position is saved every few seconds, and reopening the same movie or episode jumps back to it. This works for most players; if a player hides its video, the app still remembers which episode you were on.
+- **Rotation:** portrait in menus, free rotation while the site is open.
+- **Remembered pages:** the first time a video plays for a title, the app remembers that page, so next time Play goes straight there. If it remembered the wrong page, use **⋯ → Forget saved page**.
 
-> You could instead save it as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) so it's built into the app. Because this repo is public, anyone could pull the key out of the release, so typing it into the app is better.
+---
 
-**4. Make Play open the exact page (optional, recommended).** Open any movie and any episode on the site and look at their addresses. If they contain the TMDB number (the one in a themoviedb.org address, e.g. `themoviedb.org/movie/550` → `550`), edit `paths` in `domain.json`:
+## Make Play open the exact page (optional, recommended)
+
+Until this is set, **Play** runs a site search for the title. To go straight to the right page, open any movie and any episode on the site, tap **⋯ → Copy link**, and look at the addresses.
+
+If they contain the TMDB number (the one in a themoviedb.org address, e.g. `themoviedb.org/movie/550` → `550`), edit `paths` in `domain.json` on GitHub (✏️ pencil → **Commit changes**):
 
 ```json
 "paths": {
@@ -112,31 +107,43 @@ Then open the source and install **Flix**. New builds show up as updates. SideSt
 }
 ```
 
-Use whatever shape the site actually uses. Other placeholders: `{slug}` (`the-dark-knight`), `{title}`, `{year}`. Until `movie`/`tv` are set, Play runs a site search for the title. Either way, **the app remembers the page the first time a video plays**, so next time Play goes straight there. If it remembered the wrong page, use **⋯ → Forget saved page** in the player.
+Use whatever shape the site actually uses. Placeholders:
 
-**How it behaves**
+| Placeholder | Becomes |
+|---|---|
+| `{id}` | TMDB number, e.g. `155` |
+| `{slug}` | Title in lowercase with dashes, e.g. `the-dark-knight` |
+| `{title}` | Title as written |
+| `{year}` | Release year |
+| `{season}` | Season number |
+| `{episode}` | Episode number |
+| `{query}` | Search text (search link only) |
 
-- **Address:** reads `domain.json` on launch. If that address looks dead, it follows the mirrors itself, the same way the checker does. **Settings** shows where the address came from.
-- **Blocking:** known ad and pop-under networks are blocked. New windows are dropped, and the page can't redirect you off the site. The green shield shows how many were stopped.
-- **Resume:** while a video plays, its position is saved every few seconds. Opening the same movie or episode again jumps back to it. This works for most players; if a player hides its video, the app still remembers which episode you were on.
-- **Rotation:** the app stays portrait in menus and rotates freely while the site is open.
-- **Backup:** **⋯ → Open in Brave** opens the current page in Brave.
+Leave `movie` or `tv` empty (`""`) to keep using search for that type. The app picks up changes the next time it opens.
+
+---
+
+## Keeping it working
+
+- **Every 7 days:** apps signed with a free Apple ID expire after a week. SideStore renews them in the background. About once a week, connect **LocalDevVPN** and open **SideStore** (or tap **My Apps → Refresh All**). If Flix ever won't open, do this.
+- **Updates:** when the app code changes, a new version appears in SideStore. Connect LocalDevVPN, then tap **Update**.
+- **App limit:** a free Apple ID allows **3 sideloaded apps at once**, and SideStore counts as one. That leaves room for Flix and one more.
 
 ---
 
 ## When the address changes
 
-**Usually: nothing to do.** The checker runs every 4 hours. If you notice the site moved before it catches up, open **Actions** → **Check domain** → **Run workflow**.
+**Usually: nothing to do.** The checker runs every 4 hours, and the app also checks the mirrors itself on launch. If you notice the site moved before either catches up, open **Actions** → **Check domain** → **Run workflow**.
 
-**If the checker misses it** (manual fallback, works from your phone):
+**If both miss it** (manual fallback, works from your phone):
 
 1. On GitHub, open `domain.json` → tap the ✏️ pencil.
 2. Change `"domain"` to the new address (e.g. `"flixbaba.newone"`) and `"pinned"` to `true`.
-3. **Commit changes.** Your Shortcut uses it within a couple of minutes.
+3. **Commit changes.** In Flix, go to **Settings** → **Check again**.
 
-`"pinned": true` stops the checker from changing it. Set it back to `false` once you want auto-checking again.
+`"pinned": true` stops the checker from changing it. Set it back to `false` when you want auto-checking again.
 
-**Spotted a new mirror address?** Add it to the `MIRRORS` list near the top of `check_domain.py`. More old addresses give the checker more places to find the "moved to" banner.
+**Spotted a new mirror address?** Add it to `"mirrors"` in `domain.json` (the app reads this list) and to `MIRRORS` near the top of `check_domain.py` (the checker reads this one). More old addresses give both more places to find the "moved to" banner.
 
 ---
 
@@ -144,10 +151,62 @@ Use whatever shape the site actually uses. Other placeholders: `{slug}` (`the-da
 
 | Problem | Fix |
 |---|---|
-| Shortcut opens Brave to a blank tab | Check step 5. The text must read exactly `brave://open-url?url=https://` + variable + `/`. |
-| "Couldn't connect" on step 3 | GitHub Pages isn't live yet. Wait a few minutes after Part 1 step 4. |
-| Screen doesn't rotate | Make sure the video is in **fullscreen**. Check that step 1 says **Turn Off**, not Toggle. |
-| Ads still get through | Confirm Shields are **Aggressive**. Close any tab that pops up rather than tapping inside it. |
-| Checker always says "No live address found" | The site may be blocking GitHub's servers with a bot check. Use the manual fallback above; the checker never overwrites the address when it's unsure. |
+| Flix won't open / "app no longer available" | Its 7-day signature ran out. Connect LocalDevVPN → open SideStore → **Refresh All**. |
+| SideStore says it can't connect | Connect **LocalDevVPN** first. Stay on Wi-Fi or mobile data. |
+| Home screen is empty with a key message | Add the TMDB key in **Settings** (Part 3). |
+| "TMDB rejected the API key" | Re-copy the key from themoviedb.org. Paste the API Key *or* the Read Access Token, not both. |
+| Play opens a search or 404 page | Pick the right result. It's remembered after the first play. Better: set `paths` (see above). |
+| Play opens the wrong page every time | In the player: **⋯ → Forget saved page**, then play again. |
+| Doesn't resume where I left off | The player may hide its video from the app; the episode is still remembered. |
+| Site won't load | **Settings → Check again**. If the address is wrong, use the manual fallback above. |
+| Checker always says "No live address found" | The site may block GitHub's servers with a bot check. Use the manual fallback; the checker never overwrites the address when unsure. |
+| GitHub build failed | **Actions** tab → **Build iOS app** → open the red run to see why. |
 
 **Safety:** don't install anything or allow notifications the site asks for, and don't enter personal details on it.
+
+---
+
+## Backup: the Brave + Shortcut launcher
+
+This was the setup before the app. It still works and needs no sideloading: one Shortcut icon that unlocks rotation and opens the current address in Brave with ads blocked.
+
+**Brave (2 min).** Install **Brave** from the App Store. Then **⋯** → **Settings** → **Shields & Privacy**: **Trackers & ads blocking** → **Aggressive**, and **Block Pop-ups** → **On**. Leave **Block Scripts** off; it breaks the video player.
+
+**The Shortcut (5 min).** **Shortcuts** → **+**, then add these actions in order:
+
+| # | Action | Set it to |
+|---|---|---|
+| 1 | **Set Orientation Lock** | Tap *Toggle* → change to **Turn**, set to **Off** |
+| 2 | **URL** | `https://chiennugget.github.io/flix-launcher/domain.json` |
+| 3 | **Get Contents of URL** | (leave as is) |
+| 4 | **Get Dictionary Value** | Get **Value** for key `domain` in *Contents of URL* |
+| 5 | **Text** | `brave://open-url?url=https://` then the **Dictionary Value** variable, then `/` |
+| 6 | **Open URLs** | (uses the Text above) |
+
+Rename it **Flix** → **ⓘ** / share → **Add to Home Screen**. Run it once and choose **Always Allow** on the prompts.
+
+**Re-lock rotation (2 min).** **Shortcuts** → **Automation** → **+** → **App** → **Brave** → tick only **Is Closed** → **Run Immediately** → **New Blank Automation** → **Set Orientation Lock** → **Turn** → **On** → **Done**.
+
+**Web app icon (optional).** In Safari, open `https://chiennugget.github.io/flix-launcher/` → **Share** → **Add to Home Screen**. Launched from the Home Screen, it opens Brave at the current address. It can't unlock rotation.
+
+| Problem | Fix |
+|---|---|
+| Shortcut opens Brave to a blank tab | Step 5 must read exactly `brave://open-url?url=https://` + variable + `/`. |
+| "Couldn't connect" on step 3 | GitHub Pages isn't live. **Settings** → **Pages** → Source **Deploy from a branch**, **main**, **/ (root)**. |
+| Screen doesn't rotate | Put the video in **fullscreen**. Step 1 must say **Turn Off**, not Toggle. |
+
+---
+
+## What's in this repo
+
+| Path | What it is |
+|---|---|
+| `domain.json` | Current address, mirrors and link templates |
+| `check_domain.py`, `.github/workflows/check-domain.yml` | The checker that updates `domain.json` every 4 hours |
+| `ios/` | The iOS app (SwiftUI). `project.yml` describes the Xcode project |
+| `.github/workflows/build-ios.yml` | Builds `Flix.ipa` and the SideStore source on each change to `ios/` |
+| `index.html`, `manifest.webmanifest`, `icon-*.png` | The backup web launcher (GitHub Pages) |
+
+**First-time GitHub setup (already done for this repo).** For a fresh copy:
+1. Turn on **Settings** → **Pages** → **Deploy from a branch** → **main** / **(root)**.
+2. Set **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write permissions**, so the checker and the app build can save their results.
