@@ -50,11 +50,15 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     var isAllowed: (URL) -> Bool = { _ in true }
     var onVideo: ((VideoEvent) -> Void)?
     var onURLChange: ((URL) -> Void)?
+    /// The site's player asked to enter or leave fullscreen (only when the
+    /// iPhone's own fullscreen player is turned off).
+    var onFullscreen: ((_ exitOnly: Bool) -> Void)?
     private var observations: [NSKeyValueObservation] = []
 
     var currentURL: URL? { webView?.url }
 
-    func makeWebView(startURL: URL, rules: WKContentRuleList?, playerOnly: Bool, playerParam: String) -> WKWebView {
+    func makeWebView(startURL: URL, rules: WKContentRuleList?, playerOnly: Bool, playerParam: String,
+                     nativeFullscreen: Bool) -> WKWebView {
         self.playerOnly = playerOnly
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
@@ -67,6 +71,10 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         let content = config.userContentController
         content.addUserScript(WKUserScript(source: Scripts.video, injectionTime: .atDocumentEnd,
                                            forMainFrameOnly: false))
+        // Before the page's own scripts, so players pick up the replaced fullscreen calls.
+        content.addUserScript(WKUserScript(
+            source: "window.__flixNativeFullscreen = \(nativeFullscreen);\n" + Scripts.fullscreen,
+            injectionTime: .atDocumentStart, forMainFrameOnly: false))
         let focusSetup = "window.__flixFocusDefault = \(playerOnly); window.__flixPlayerParam = '\(playerParam)';\n"
         content.addUserScript(WKUserScript(source: focusSetup + Scripts.focus, injectionTime: .atDocumentEnd,
                                            forMainFrameOnly: true))
@@ -163,9 +171,14 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "flixPage" {
-            if let body = message.body as? [String: Any], body["type"] as? String == "players",
-               let count = (body["count"] as? NSNumber)?.intValue {
-                detectedPlayers = count
+            guard let body = message.body as? [String: Any] else { return }
+            switch body["type"] as? String {
+            case "players":
+                if let count = (body["count"] as? NSNumber)?.intValue { detectedPlayers = count }
+            case "fullscreen":
+                onFullscreen?(body["mode"] as? String == "exit")
+            default:
+                break
             }
             return
         }
@@ -207,6 +220,12 @@ enum Scripts {
       function hook(v) {
         if (hooked.has(v)) return;
         hooked.add(v);
+        // Keep video in the page (with the player's own controls and
+        // captions) rather than the iPhone's fullscreen player.
+        if (window.__flixNativeFullscreen !== true) {
+          v.setAttribute('playsinline', '');
+          v.setAttribute('webkit-playsinline', '');
+        }
         var last = 0;
         function report(kind) {
           if (!isFinite(v.duration) || v.duration < 60) return;
@@ -262,6 +281,43 @@ enum Scripts {
       scan();
       new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
       setTimeout(poke, 1200);
+    })();
+    """#
+
+    /// Every frame, at document start. Unless the iPhone's own fullscreen
+    /// player is wanted, replaces the fullscreen calls players make with a
+    /// message to the app, which rotates and hides its bar instead. The
+    /// site's player stays on screen with its own controls (captions etc.).
+    static let fullscreen = #"""
+    (function () {
+      if (window.__flixFullscreenHooked || window.__flixNativeFullscreen === true) return;
+      window.__flixFullscreenHooked = true;
+      // The page never really goes fullscreen, so a player's own state
+      // stays "not fullscreen" and its button keeps asking to enter: enter
+      // toggles, exit always leaves.
+      function ask(mode) {
+        try { window.webkit.messageHandlers.flixPage.postMessage({ type: 'fullscreen', mode: mode }); } catch (e) {}
+      }
+      function enter() { ask('toggle'); return Promise.resolve(); }
+      function exit() { ask('exit'); return Promise.resolve(); }
+      var el = Element.prototype;
+      el.requestFullscreen = enter;
+      el.webkitRequestFullscreen = enter;
+      el.webkitRequestFullScreen = enter;
+      var video = HTMLVideoElement.prototype;
+      video.webkitEnterFullscreen = function () { ask('toggle'); };
+      video.webkitEnterFullScreen = video.webkitEnterFullscreen;
+      document.exitFullscreen = exit;
+      document.webkitExitFullscreen = exit;
+      document.webkitCancelFullScreen = exit;
+      var play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        if (this.tagName === 'VIDEO') {
+          this.setAttribute('playsinline', '');
+          this.setAttribute('webkit-playsinline', '');
+        }
+        return play.apply(this, arguments);
+      };
     })();
     """#
 

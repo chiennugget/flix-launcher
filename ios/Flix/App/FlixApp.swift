@@ -54,6 +54,14 @@ enum Orientation {
             }
         }
     }
+
+    /// Turns the screen now, e.g. to landscape when a video goes fullscreen.
+    static func rotate(to mask: UIInterfaceOrientationMask) {
+        guard UIDevice.current.userInterfaceIdiom != .pad else { return }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+        }
+    }
 }
 
 enum Theme {
@@ -65,6 +73,7 @@ enum Keys {
     static let tmdbKey = "tmdbKey"
     static let configURL = "configURL"
     static let autoplayNext = "autoplayNext"
+    static let nativeFullscreen = "nativeFullscreen"
     static let defaultConfigURL = "https://chiennugget.github.io/flix-launcher/domain.json"
     static let rawConfigURL = "https://raw.githubusercontent.com/chiennugget/flix-launcher/main/domain.json"
 }

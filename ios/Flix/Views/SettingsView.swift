@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(Keys.tmdbKey) private var tmdbKey = ""
     @AppStorage(Keys.configURL) private var configURL = ""
     @AppStorage(Keys.autoplayNext) private var autoplayNext = true
+    @AppStorage(Keys.nativeFullscreen) private var nativeFullscreen = false
     @State private var visit: SiteVisit?
     @State private var confirmClear = false
 
@@ -60,10 +61,11 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Autoplay next episode", isOn: $autoplayNext)
+                    Toggle("Use iPhone fullscreen player", isOn: $nativeFullscreen)
                 } header: {
                     Text("Playback")
                 } footer: {
-                    Text("Near the end of an episode, a 10-second countdown starts the next one on the same player.")
+                    Text("Autoplay: near the end of an episode, a 10-second countdown starts the next one on the same player.\n\nFullscreen: off keeps the site's player and its controls (captions, quality) in fullscreen. On uses the iPhone's own player, which has picture-in-picture but can show subtitles twice. Applies the next time you open a video.")
                 }
 
                 Section("Advanced") {
