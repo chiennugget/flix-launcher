@@ -1,3 +1,4 @@
+import UIKit
 import WebKit
 
 /// Compiles the bundled ad blocklist once and shares it with every web view.
@@ -36,7 +37,8 @@ struct VideoEvent {
 /// Owns the site's web view: blocks pop-ups and off-site redirects, and
 /// relays video playback events from every frame.
 @MainActor
-final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler,
+    UIGestureRecognizerDelegate {
     @Published private(set) var canGoBack = false
     @Published private(set) var canGoForward = false
     @Published private(set) var blocked = 0
@@ -53,6 +55,8 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     /// The site's player asked to enter or leave fullscreen (only when the
     /// iPhone's own fullscreen player is turned off).
     var onFullscreen: ((_ exitOnly: Bool) -> Void)?
+    /// Any tap on the page. The tap still reaches the page too.
+    var onTap: (() -> Void)?
     private var observations: [NSKeyValueObservation] = []
 
     var currentURL: URL? { webView?.url }
@@ -90,6 +94,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
 
+        let tap = UITapGestureRecognizer(target: self, action: #selector(pageTapped))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        webView.addGestureRecognizer(tap)
+
         observations = [
             webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] view, _ in
                 Task { @MainActor in self?.canGoBack = view.canGoBack }
@@ -107,6 +116,16 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         self.webView = webView
         webView.load(URLRequest(url: startURL))
         return webView
+    }
+
+    @objc private func pageTapped() {
+        onTap?()
+    }
+
+    /// Watch taps alongside the page's own gestures, never instead of them.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
     }
 
     func load(_ url: URL) {
