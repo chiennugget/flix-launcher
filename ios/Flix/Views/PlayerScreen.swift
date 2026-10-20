@@ -32,6 +32,7 @@ struct PlayerScreen: View {
     @State private var countdown = 0
     @State private var countdownTask: Task<Void, Never>?
     @State private var promptedKey: String?
+    @State private var showEpisodes = false
 
     private var landscape: Bool { verticalSizeClass == .compact }
 
@@ -70,6 +71,14 @@ struct PlayerScreen: View {
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .task { await start() }
+        .sheet(isPresented: $showEpisodes) {
+            if let request = current {
+                EpisodePicker(title: request.title, seasons: seasons, playing: request) { picked in
+                    showEpisodes = false
+                    go(to: picked)
+                }
+            }
+        }
         .onAppear { Orientation.allow(.allButUpsideDown) }
         .onDisappear {
             fallbackTask?.cancel()
@@ -98,6 +107,7 @@ struct PlayerScreen: View {
                     .accessibilityLabel("\(web.blocked) pop-ups blocked")
             }
             if current != nil { playerMenu }
+            if current?.title.type == .tv { episodeButtons }
             moreMenu
         }
         .font(.body.weight(.semibold))
@@ -112,6 +122,7 @@ struct PlayerScreen: View {
         HStack(spacing: 16) {
             closeButton
             if current != nil { playerMenu }
+            if current?.title.type == .tv { episodeButtons }
             moreMenu
         }
         .font(.body.weight(.semibold))
@@ -121,6 +132,16 @@ struct PlayerScreen: View {
         .background(.black.opacity(0.45), in: Capsule())
         .padding(.leading, 12)
         .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var episodeButtons: some View {
+        Button { showEpisodes = true } label: { Image(systemName: "list.bullet.rectangle") }
+            .accessibilityLabel("Episodes")
+        if let next = current?.next(in: seasons) {
+            Button { go(to: next) } label: { Image(systemName: "forward.end.fill") }
+                .accessibilityLabel("Next episode, \(next.episodeLabel ?? "")")
+        }
     }
 
     private var closeButton: some View {
@@ -326,11 +347,17 @@ struct PlayerScreen: View {
 
     private func playNext() {
         guard let next = upNext else { return }
+        go(to: next)
+    }
+
+    /// Switches to another episode on the current player.
+    private func go(to request: PlayRequest) {
         countdownTask?.cancel()
         withAnimation { upNext = nil }
-        current = next
-        Library.markWatched(next, progress: Library.existingProgress(key: next.progressKey, in: context), in: context)
-        guard let link = link(for: next) else { return }
+        current = request
+        Library.markWatched(request, progress: Library.existingProgress(key: request.progressKey, in: context),
+                            in: context)
+        guard let link = link(for: request) else { return }
         web.load(site.url(link, player: player))
         armFallback()
     }

@@ -304,7 +304,7 @@ struct TitleDetailView: View {
     }
 }
 
-private struct EpisodeRow: View {
+struct EpisodeRow: View {
     let episode: Episode
     let progress: WatchProgress?
 
