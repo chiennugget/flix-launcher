@@ -80,6 +80,7 @@ Posters, descriptions, episode lists and search come from The Movie Database (TM
 - **In the player:** Play opens the episode with **only the video player** on screen and tries to start it.
   - **P1 ▾** switches between the site's players (Player 1, 2, 3…). If nothing plays within about 15 seconds, a **Try Player 2** button pops up. The app remembers which player worked for each show and starts there next time.
   - **✕** closes the player, **‹** goes back, **↻** reloads. In landscape these float over the video.
+  - **Episodes** (list icon) opens the show's seasons and episodes over the video; tap one to switch to it on the same player. **⏭** skips to the next episode.
   - **Up next:** 15 seconds before an episode ends, a 10-second countdown starts the next one on the same player. Tap **Play now** or **✕**. Turn it off in **Settings → Playback**.
   - The green **shield** counts pop-ups and redirects that were blocked.
   - **⋯** has **Show full page** (the whole flixbaba page, e.g. to pick episodes there), **Open in Brave**, **Copy link** and **Forget saved page**.
