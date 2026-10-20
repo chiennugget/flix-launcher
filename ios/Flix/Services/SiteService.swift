@@ -11,11 +11,15 @@ struct SiteConfig: Codable {
 }
 
 /// Link templates for the site, e.g. "/movie/{id}". Placeholders: {id} (TMDB
-/// id), {slug}, {title}, {year}, {season}, {episode}, {query}.
+/// id), {slug}, {title}, {year}, {season}, {episode}, {player}, {query}.
 struct SitePaths: Codable, Equatable {
     var movie: String?
     var tv: String?
     var search: String?
+    /// Query parameter that picks the site's player, e.g. "p" in "?p=2".
+    var player: String?
+    /// How many players to offer when the page doesn't list them itself.
+    var players: Int?
 }
 
 /// Knows the site's current address and how to build links into it.
@@ -146,8 +150,10 @@ final class SiteService: ObservableObject {
     /// else the home page.
     func link(for request: PlayRequest) -> URL? {
         let template = request.title.type == .movie ? paths.movie : paths.tv
+        var values = request.variables
+        values["player"] = "1"
         if let t = template?.trimmingCharacters(in: .whitespaces), !t.isEmpty,
-           let url = url(path: Template.fill(t, request.variables)) {
+           let url = url(path: Template.fill(t, values)) {
             return url
         }
         return searchURL(request.title.name) ?? homeURL
@@ -156,6 +162,29 @@ final class SiteService: ObservableObject {
     func searchURL(_ text: String) -> URL? {
         guard let t = paths.search?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return nil }
         return url(path: Template.fill(t, ["query": text, "title": text]))
+    }
+
+    // MARK: Players
+
+    var playerParam: String {
+        let name = (paths.player ?? "").filter { $0.isLetter || $0.isNumber || $0 == "_" }
+        return name.isEmpty ? "p" : name
+    }
+
+    var playerCount: Int { min(max(paths.players ?? 5, 1), 20) }
+
+    func player(in url: URL) -> Int? {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        return items?.first { $0.name == playerParam }?.value.flatMap { Int($0) }
+    }
+
+    func url(_ url: URL, player: Int) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == playerParam }
+        items.append(URLQueryItem(name: playerParam, value: String(player)))
+        components.queryItems = items
+        return components.url ?? url
     }
 
     func isSiteURL(_ url: URL) -> Bool {
@@ -181,8 +210,10 @@ final class SiteService: ObservableObject {
     func episode(in url: URL, tmdbID: Int) -> (season: Int, episode: Int)? {
         guard let t = paths.tv?.trimmingCharacters(in: .whitespaces), !t.isEmpty,
               isSiteURL(url), let regex = Template.regex(for: t) else { return nil }
-        var text = url.path
-        if let query = url.query { text += "?" + query }
+        // Compare as Player 1 so a template ending in "p=1" matches any player.
+        let normalized = player(in: url) == nil ? url : self.url(url, player: 1)
+        var text = normalized.path
+        if let query = normalized.query { text += "?" + query }
         guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
         func group(_ name: String) -> Int? {
             let r = match.range(withName: name)

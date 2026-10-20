@@ -77,11 +77,11 @@ Posters, descriptions, episode lists and search come from The Movie Database (TM
 - **Title page:** **Play** / **Resume**, **My List**, and for shows, a season picker and episode list with progress bars.
 - **Search** tab: searches TMDB. It also has a *Search on the site* button.
 - **🌐** (top right of Home): opens the site's home page.
-- **In the player:**
-  - **✕** closes the player.
-  - **‹ ›** go back and forward, and **↻** reloads.
+- **In the player:** Play opens the episode with **only the video player** on screen and tries to start it.
+  - **P1 ▾** switches between the site's players (Player 1, 2, 3…). If nothing plays within about 15 seconds, a **Try Player 2** button pops up. The app remembers which player worked for each show and starts there next time.
+  - **✕** closes the player, **‹** goes back, **↻** reloads. In landscape these float over the video.
   - The green **shield** counts pop-ups and redirects that were blocked.
-  - **⋯** has **Open in Brave**, **Copy link** and **Forget saved page**.
+  - **⋯** has **Show full page** (the whole flixbaba page, e.g. to pick episodes there), **Open in Brave**, **Copy link** and **Forget saved page**.
 
 **What happens behind the scenes**
 
@@ -118,8 +118,9 @@ Use whatever shape the site actually uses. Placeholders:
 | `{season}` | Season number |
 | `{episode}` | Episode number |
 | `{query}` | Search text (search link only) |
+| `{player}` | Player number (`p=` on flixbaba) |
 
-Leave `movie` or `tv` empty (`""`) to keep using search for that type. The app picks up changes the next time it opens.
+Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player": "p"` names the link setting that picks the site's player, and `"players": 5` is how many the player menu offers when the page doesn't list them. The app picks up changes the next time it opens.
 
 ---
 
@@ -157,6 +158,7 @@ Leave `movie` or `tv` empty (`""`) to keep using search for that type. The app p
 | "TMDB rejected the API key" | Re-copy the key from themoviedb.org. Paste the API Key *or* the Read Access Token, not both. |
 | Play opens a search or 404 page | Pick the right result. It's remembered after the first play. Better: set `paths` (see above). |
 | Play opens the wrong page every time | In the player: **⋯ → Forget saved page**, then play again. |
+| Video doesn't start / black screen | Tap **P1 ▾** and try another player. If the screen stays black, use **⋯ → Show full page**. |
 | Doesn't resume where I left off | The player may hide its video from the app; the episode is still remembered. |
 | Site won't load | **Settings → Check again**. If the address is wrong, use the manual fallback above. |
 | Checker always says "No live address found" | The site may block GitHub's servers with a bot check. Use the manual fallback; the checker never overwrites the address when unsure. |
