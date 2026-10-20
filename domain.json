@@ -2,5 +2,18 @@
   "domain": "flixbaba.mov",
   "pinned": false,
   "updated": "2026-10-19T21:02:19Z",
-  "note": "Manual override: set \"domain\" to the new address and \"pinned\" to true. Set \"pinned\" back to false to let the auto-checker take over again."
+  "note": "Manual override: set \"domain\" to the new address and \"pinned\" to true. Set \"pinned\" back to false to let the auto-checker take over again.",
+  "name": "flixbaba",
+  "mirrors": [
+    "flixbaba.com",
+    "flixbaba.cx",
+    "flixbabax.com",
+    "flixbaba.mov"
+  ],
+  "paths": {
+    "movie": "",
+    "tv": "",
+    "search": "/search?q={query}"
+  },
+  "paths_note": "Link templates for the iOS app. Placeholders: {id} (TMDB id), {slug}, {title}, {year}, {season}, {episode}, {query}. Example: \"movie\": \"/movie/{id}\", \"tv\": \"/tv/{id}/{season}/{episode}\". Empty = search the site instead."
 }
