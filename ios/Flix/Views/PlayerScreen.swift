@@ -7,9 +7,10 @@ import WebKit
 /// players one tap away.
 struct PlayerScreen: View {
     let visit: SiteVisit
+    /// Removes the screen once it has faded out.
+    let onClose: () -> Void
 
     @EnvironmentObject private var site: SiteService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @StateObject private var web = WebController()
@@ -39,10 +40,60 @@ struct PlayerScreen: View {
     /// Floating controls fade out on their own and come back on a tap.
     @State private var controlsVisible = true
     @State private var hideControlsTask: Task<Void, Never>?
+    /// Fades and zooms the whole screen in on open and out on close.
+    @State private var appeared = false
+    /// The loading cover hides redirects and the page rearranging itself
+    /// until the video is ready.
+    @State private var loading = true
+    @State private var loadingLimitTask: Task<Void, Never>?
+    @State private var revealTask: Task<Void, Never>?
+
+    init(visit: SiteVisit, onClose: @escaping () -> Void) {
+        self.visit = visit
+        self.onClose = onClose
+        // Set now so the loading cover shows the title from the first frame.
+        _current = State(initialValue: visit.request)
+    }
 
     private var landscape: Bool { verticalSizeClass == .compact }
 
     var body: some View {
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+                .opacity(appeared ? 1 : 0)
+            content
+                .scaleEffect(appeared ? 1 : 0.94)
+                .opacity(appeared ? 1 : 0)
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        .task { await start() }
+        .sheet(isPresented: $showEpisodes) {
+            if let request = current {
+                EpisodePicker(title: request.title, seasons: seasons, playing: request) { picked in
+                    showEpisodes = false
+                    go(to: picked)
+                }
+            }
+        }
+        .onAppear {
+            Orientation.allow(.allButUpsideDown)
+            withAnimation(.spring(duration: 0.4, bounce: 0)) { appeared = true }
+        }
+        .onChange(of: landscape || fullscreen, initial: true) { showControls() }
+        .onDisappear {
+            fallbackTask?.cancel()
+            countdownTask?.cancel()
+            hideControlsTask?.cancel()
+            loadingLimitTask?.cancel()
+            revealTask?.cancel()
+            web.teardown()
+            Orientation.allow(.portrait)
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             if !landscape && !fullscreen { topBar }
             ZStack(alignment: .bottom) {
@@ -53,8 +104,10 @@ struct PlayerScreen: View {
                                 nativeFullscreen: nativeFullscreen)
                 } else if started {
                     Text("Couldn't build a link to the site.").foregroundStyle(.secondary)
-                } else {
-                    ProgressView().tint(.white)
+                }
+                if loading {
+                    loadingCover
+                        .transition(.opacity)
                 }
                 if let upNext {
                     upNextCard(upNext)
@@ -80,26 +133,81 @@ struct PlayerScreen: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
-        .task { await start() }
-        .sheet(isPresented: $showEpisodes) {
-            if let request = current {
-                EpisodePicker(title: request.title, seasons: seasons, playing: request) { picked in
-                    showEpisodes = false
-                    go(to: picked)
+    }
+
+    // MARK: Loading cover
+
+    private var loadingCover: some View {
+        ZStack {
+            Color.black
+            if let path = current?.title.backdropPath ?? current?.title.posterPath {
+                // Same size as the detail page, so it's usually already cached.
+                AsyncImage(url: TMDB.image(path, size: "w1280")) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        Color.black
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .blur(radius: 20)
+                .opacity(0.6)
             }
+            LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.85)],
+                           startPoint: .top, endPoint: .bottom)
+            VStack(spacing: 8) {
+                if let current {
+                    Text(current.title.name)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                    if let episode = current.episodeLabel {
+                        Text(episode)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                    .padding(.top, 14)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 32)
         }
-        .onAppear { Orientation.allow(.allButUpsideDown) }
-        .onChange(of: landscape || fullscreen, initial: true) { showControls() }
-        .onDisappear {
-            fallbackTask?.cancel()
-            countdownTask?.cancel()
-            hideControlsTask?.cancel()
-            web.teardown()
-            Orientation.allow(.portrait)
+        .clipped()
+    }
+
+    /// Shows the cover for a new page. It lifts once the video is ready, or
+    /// after 8 seconds so the site's own play button can be tapped.
+    private func beginLoading() {
+        revealTask?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) { loading = true }
+        loadingLimitTask?.cancel()
+        loadingLimitTask = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            revealPage()
         }
+    }
+
+    /// Lifts the cover after a short pause, unless another page starts loading first.
+    private func revealSoon(after seconds: Double) {
+        guard loading else { return }
+        revealTask?.cancel()
+        revealTask = Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            revealPage()
+        }
+    }
+
+    private func revealPage() {
+        revealTask?.cancel()
+        loadingLimitTask?.cancel()
+        guard loading else { return }
+        withAnimation(.easeInOut(duration: 0.45)) { loading = false }
     }
 
     // MARK: Controls
@@ -195,8 +303,19 @@ struct PlayerScreen: View {
     }
 
     private var closeButton: some View {
-        Button { dismiss() } label: { Image(systemName: "xmark") }
+        Button { close() } label: { Image(systemName: "xmark") }
             .accessibilityLabel("Close")
+    }
+
+    /// Fades out (back to portrait first), then removes the screen.
+    private func close() {
+        web.webView?.pauseAllMediaPlayback(completionHandler: nil)
+        if landscape || fullscreen { Orientation.allow(.portrait) }
+        withAnimation(.easeIn(duration: 0.25)) {
+            appeared = false
+        } completion: {
+            onClose()
+        }
     }
 
     private var playerCount: Int {
@@ -230,6 +349,7 @@ struct PlayerScreen: View {
                 Button {
                     playerOnly.toggle()
                     web.setPlayerOnly(playerOnly)
+                    revealPage()
                 } label: {
                     if playerOnly {
                         Label("Show full page", systemImage: "rectangle.expand.vertical")
@@ -320,6 +440,13 @@ struct PlayerScreen: View {
         web.onURLChange = { url in urlChanged(url) }
         web.onFullscreen = { exitOnly in setFullscreen(exitOnly ? false : !fullscreen) }
         web.onTap = { toggleControls() }
+        web.onPageStart = { revealTask?.cancel() }
+        web.onPageFinish = {
+            // Without player-only mode there's no player to wait for: show the
+            // page once it has loaded and isn't redirecting again.
+            if current == nil || !web.playerOnly { revealSoon(after: 0.6) }
+        }
+        web.onPlayerFocused = { revealSoon(after: 1.2) }
 
         if let request = current {
             Library.markWatched(request, progress: Library.existingProgress(key: request.progressKey, in: context),
@@ -332,6 +459,7 @@ struct PlayerScreen: View {
             url = site.url(link, player: player)
             armFallback()
         }
+        if url != nil { beginLoading() } else { loading = false }
         startURL = url
         started = true
 
@@ -359,6 +487,7 @@ struct PlayerScreen: View {
         guard let url = web.currentURL ?? startURL else { return }
         player = n
         withAnimation { suggestedPlayer = nil }
+        beginLoading()
         web.load(site.url(url, player: n))
         armFallback()
     }
@@ -410,6 +539,7 @@ struct PlayerScreen: View {
         Library.markWatched(request, progress: Library.existingProgress(key: request.progressKey, in: context),
                             in: context)
         guard let link = link(for: request) else { return }
+        beginLoading()
         web.load(site.url(link, player: player))
         armFallback()
     }
@@ -422,6 +552,7 @@ struct PlayerScreen: View {
     // MARK: Playback events
 
     private func handle(_ event: VideoEvent) {
+        revealSoon(after: 0.3)
         guard let request = current else { return }
         let progress = Library.progress(for: request, in: context)
 

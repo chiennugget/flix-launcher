@@ -42,7 +42,7 @@ struct SearchView: View {
                         prompt: "Movies, shows")
             .navigationDestination(for: Title.self) { TitleDetailView(title: $0) }
             .task(id: query) { await search() }
-            .fullScreenCover(item: $visit) { PlayerScreen(visit: $0) }
+            .playerCover($visit)
         }
     }
 

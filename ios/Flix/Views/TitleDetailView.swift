@@ -59,7 +59,7 @@ struct TitleDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadDetail() }
         .task(id: season) { await loadSeason() }
-        .fullScreenCover(item: $visit) { PlayerScreen(visit: $0) }
+        .playerCover($visit)
     }
 
     // MARK: Sections

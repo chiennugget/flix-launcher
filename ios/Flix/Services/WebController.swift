@@ -27,6 +27,20 @@ final class AdBlocker {
     }
 }
 
+/// Starts WebKit's helper processes at launch, so the first video opens as
+/// quickly as later ones. The blank view stays around to keep them warm.
+@MainActor
+enum WebWarmup {
+    private static var view: WKWebView?
+
+    static func start() {
+        guard view == nil else { return }
+        let webView = WKWebView(frame: .zero)
+        webView.loadHTMLString("<html><body></body></html>", baseURL: nil)
+        view = webView
+    }
+}
+
 struct VideoEvent {
     let kind: String
     let time: Double
@@ -57,6 +71,12 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     var onFullscreen: ((_ exitOnly: Bool) -> Void)?
     /// Any tap on the page. The tap still reaches the page too.
     var onTap: (() -> Void)?
+    /// The main page started loading a new address (including redirects).
+    var onPageStart: (() -> Void)?
+    /// The main page finished loading.
+    var onPageFinish: (() -> Void)?
+    /// Player-only mode found the video player and pinned it full screen.
+    var onPlayerFocused: (() -> Void)?
     private var observations: [NSKeyValueObservation] = []
 
     var currentURL: URL? { webView?.url }
@@ -171,8 +191,13 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         return .cancel
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        onPageStart?()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         applyPlayerOnly()
+        onPageFinish?()
     }
 
     /// window.open and target=_blank: pop-ups are dropped, same-site links open in place.
@@ -196,6 +221,8 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
                 if let count = (body["count"] as? NSNumber)?.intValue { detectedPlayers = count }
             case "fullscreen":
                 onFullscreen?(body["mode"] as? String == "exit")
+            case "focused":
+                onPlayerFocused?()
             default:
                 break
             }
@@ -414,6 +441,7 @@ enum Scripts {
         return max;
       }
       var lastCount = -1;
+      var reportedFocus = false;
       function apply() {
         var root = document.documentElement;
         if (!root) return;
@@ -431,6 +459,7 @@ enum Scripts {
           }
         }
         root.classList.add('__flix_focus');
+        if (!reportedFocus) { reportedFocus = true; post({ type: 'focused' }); }
       }
       var pending = null;
       function schedule() {

@@ -86,7 +86,7 @@ struct SettingsView: View {
                                 titleVisibility: .visible) {
                 Button("Clear", role: .destructive) { clearHistory() }
             }
-            .fullScreenCover(item: $visit) { PlayerScreen(visit: $0) }
+            .playerCover($visit)
         }
     }
 
