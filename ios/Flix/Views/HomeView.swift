@@ -139,7 +139,7 @@ struct HomeView: View {
                 await model.load(key: tmdbKey, force: true)
                 await site.refresh()
             }
-            .fullScreenCover(item: $visit) { PlayerScreen(visit: $0) }
+            .playerCover($visit)
         }
     }
 }

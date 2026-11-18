@@ -155,3 +155,40 @@ struct HeroView: View {
         .buttonStyle(.plain)
     }
 }
+
+extension View {
+    /// Opens the player over this screen with a fade and slight zoom instead
+    /// of the usual slide-up.
+    func playerCover(_ visit: Binding<SiteVisit?>) -> some View {
+        modifier(PlayerCover(visit: visit))
+    }
+}
+
+/// Presents the player without the system animation. PlayerScreen fades
+/// itself in and out over a clear background.
+private struct PlayerCover: ViewModifier {
+    @Binding var visit: SiteVisit?
+    @State private var shown: SiteVisit?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: visit?.id) {
+                withoutAnimation { shown = visit }
+            }
+            .fullScreenCover(item: $shown) { visit in
+                PlayerScreen(visit: visit) {
+                    withoutAnimation {
+                        shown = nil
+                        self.visit = nil
+                    }
+                }
+                .presentationBackground(.clear)
+            }
+    }
+}
+
+func withoutAnimation(_ body: () -> Void) {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction, body)
+}

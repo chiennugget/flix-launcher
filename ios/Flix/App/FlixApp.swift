@@ -21,6 +21,7 @@ struct FlixApp: App {
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 .task {
+                    WebWarmup.start()
                     _ = await AdBlocker.shared.rules()
                     await site.refresh()
                 }
