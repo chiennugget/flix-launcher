@@ -129,12 +129,6 @@ struct TitleDetailView: View {
             HStack {
                 Text("Episodes").font(.title2.bold())
                 Spacer()
-                Picker("Season", selection: $season) {
-                    ForEach(seasons, id: \.seasonNumber) { s in
-                        Text(s.name ?? "Season \(s.seasonNumber)").tag(s.seasonNumber)
-                    }
-                }
-                .pickerStyle(.menu)
                 Menu {
                     Button {
                         markSeason(true)
@@ -153,6 +147,8 @@ struct TitleDetailView: View {
                 .accessibilityLabel("Season options")
             }
             .padding(.top, 8)
+            seasonMenu
+                .padding(.bottom, 6)
         }
         if loadingEpisodes && episodes.isEmpty {
             ProgressView().frame(maxWidth: .infinity)
@@ -163,29 +159,59 @@ struct TitleDetailView: View {
             }
             .font(.subheadline)
         }
-        ForEach(episodes) { ep in
-            let request = PlayRequest(title: shown, season: ep.seasonNumber, episode: ep.episodeNumber)
-            Button {
-                play(request)
-            } label: {
-                EpisodeRow(episode: ep, progress: progressByKey[request.progressKey])
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                let done = progressByKey[request.progressKey]?.isFinished == true
+        VStack(alignment: .leading, spacing: 20) {
+            ForEach(episodes) { ep in
+                let request = PlayRequest(title: shown, season: ep.seasonNumber, episode: ep.episodeNumber)
                 Button {
                     play(request)
                 } label: {
-                    Label("Play", systemImage: "play.fill")
+                    EpisodeRow(episode: ep, progress: progressByKey[request.progressKey])
                 }
-                Button {
-                    Library.setWatched(request, !done, runtimeMinutes: ep.runtime, in: context)
-                } label: {
-                    Label(done ? "Mark as unwatched" : "Mark as watched",
-                          systemImage: done ? "eye.slash" : "checkmark.circle")
+                .buttonStyle(.plain)
+                .contextMenu {
+                    let done = progressByKey[request.progressKey]?.isFinished == true
+                    Button {
+                        play(request)
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                    }
+                    Button {
+                        Library.setWatched(request, !done, runtimeMinutes: ep.runtime, in: context)
+                    } label: {
+                        Label(done ? "Mark as unwatched" : "Mark as watched",
+                              systemImage: done ? "eye.slash" : "checkmark.circle")
+                    }
                 }
             }
         }
+    }
+
+    private func seasonName(_ s: SeasonSummary) -> String {
+        s.name ?? "Season \(s.seasonNumber)"
+    }
+
+    /// Its own line under the heading, so long names ("Book One: Survival")
+    /// stay on one line instead of wrapping into the episode list.
+    private var seasonMenu: some View {
+        Menu {
+            Picker("Season", selection: $season) {
+                ForEach(seasons, id: \.seasonNumber) { s in
+                    Text(seasonName(s)).tag(s.seasonNumber)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(seasons.first { $0.seasonNumber == season }.map(seasonName) ?? "Season \(season)")
+                    .lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption.weight(.bold))
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Theme.card, in: Capsule())
+        }
+        .accessibilityLabel("Season")
     }
 
     // MARK: Actions
@@ -309,7 +335,7 @@ struct EpisodeRow: View {
     let progress: WatchProgress?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 16) {
             Color.clear
                 .frame(width: 128, height: 72)
                 .overlay { PosterImage(path: episode.stillPath, name: "E\(episode.episodeNumber)", size: "w300") }

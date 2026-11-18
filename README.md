@@ -1,46 +1,56 @@
-# Flix — setup guide
+# Flix
 
-**Flix** is an iPhone app that gives flixbaba a Netflix-style home screen: posters, search, **My List**, **Continue Watching** and resume points. It finds the site's current address by itself, blocks pop-ups and ads, and rotates for video. You don't need Brave or Shortcuts.
+**Flix** is an iPhone app that gives flixbaba a Netflix-style home screen: posters, search, **My List**, **Continue Watching**, resume points and autoplay for the next episode. It finds the site's current address on its own, blocks pop-ups and ads, and rotates for video.
 
-**How it fits together**
+It isn't on the App Store. You install it yourself with **SideStore**, which takes about 20 minutes the first time. Anyone can do it with their own iPhone, so feel free to send this page to a friend.
 
-- **GitHub** (this repo) holds `domain.json`, the file with the site's current address.
-- **A checker** runs on GitHub every 4 hours. It follows the "now available at…" banners and redirects, and updates `domain.json` when the site moves.
-- **GitHub Actions** builds the app whenever its code in `ios/` changes and posts it under **Releases**.
-- **SideStore** installs the app on your iPhone and keeps it signed with your own free Apple ID. No Mac needed.
-- **The app** reads `domain.json`. If that address looks dead, it checks the mirrors itself.
+**Contents:** [What you need](#what-you-need) · [1. Install SideStore](#part-1--install-sidestore-one-time-15-min-needs-a-computer-once) · [2. Install Flix](#part-2--install-flix-2-min-on-your-iphone) · [3. Movie-info key](#part-3--add-a-free-movie-info-key-3-min) · [Keep it working](#keeping-it-working) · [If Flix expired or won't refresh](#if-flix-expired-or-wont-refresh) · [Using the app](#using-the-app) · [Troubleshooting](#troubleshooting)
+
+---
+
+## What you need
+
+- An **iPhone on iOS 17 or newer** with a passcode set.
+- **Your own Apple ID.** A free one works, and you don't need a paid developer account. Use your own: the app is signed with it, and nobody else ever sees it.
+- **A computer, once:** Windows, Mac or Linux, plus a cable for the phone. It's only for the first install, and borrowing a friend's is fine.
+- **About 20 minutes.**
+
+You don't need a GitHub account. Everything below is free.
 
 | Link | Address |
 |---|---|
+| **SideStore source (what you paste into SideStore)** | `https://github.com/chiennugget/flix-launcher/releases/latest/download/apps.json` |
+| Newest Flix release | [github.com/chiennugget/flix-launcher/releases/latest](https://github.com/chiennugget/flix-launcher/releases/latest) |
 | This repo | `https://github.com/chiennugget/flix-launcher` |
-| Current address file | `https://chiennugget.github.io/flix-launcher/domain.json` |
-| SideStore source | `https://github.com/chiennugget/flix-launcher/releases/latest/download/apps.json` |
+| Current site address file | `https://chiennugget.github.io/flix-launcher/domain.json` |
 
 ---
 
 ## Part 1 — Install SideStore (one time, ~15 min, needs a computer once)
 
-SideStore is the app that installs Flix. The first install needs a computer: Windows, Mac or Linux, and a friend's is fine. After that, everything happens on the phone.
+SideStore installs Flix and keeps it signed with your Apple ID. You only need the computer for this part. After it, everything happens on the phone.
 
 **On the iPhone first**
 
-1. Make sure the phone has a **passcode**. The next step fails without one.
+1. Make sure the phone has a **passcode**. The next steps fail without one.
 2. Install **LocalDevVPN** from the App Store. SideStore uses it to talk to your phone. It's a local connection, not a real VPN service, and your traffic doesn't go anywhere.
 
 **On the computer**
 
-3. Download **iloader** from its official page, [github.com/nab138/iloader](https://github.com/nab138/iloader) → **Releases**, picking the file for your computer.
+3. Download the **newest** **iloader** from its official page, [github.com/nab138/iloader](https://github.com/nab138/iloader) → **Releases**, picking the file for your computer. Older versions can't sign in to Apple anymore (see [troubleshooting](#troubleshooting)).
    - **Windows:** install **iTunes** from apple.com first (iloader needs its phone driver).
    - **Mac:** nothing extra.
    - **Linux:** install `usbmuxd` if it isn't there already.
 4. Plug the iPhone in with a cable and tap **Trust** on the phone.
-5. Open iloader → sign in with your **Apple ID** → choose **Install SideStore**. It installs SideStore and sets up the files it needs to connect to your phone.
+5. Open iloader → sign in with your **Apple ID** → choose **Install SideStore**. It installs SideStore and the pairing file it needs to reach your phone. If a two-factor code pops up on one of your Apple devices, approve it.
 
 **Back on the iPhone (unplug now)**
 
 6. **Settings** → **Privacy & Security** → **Developer Mode** → **On**. The phone restarts; after it does, tap **Turn On** to confirm.
 7. **Settings** → **General** → **VPN & Device Management** → tap your Apple ID email → **Trust**.
-8. Open **LocalDevVPN** → **Connect**. Then open **SideStore**, allow the prompts it asks for, and sign in with your Apple ID under its **Settings** tab.
+8. Open **LocalDevVPN** → **Connect**. Then open **SideStore**, allow the prompts it asks for (including **Local Network**), and sign in with your Apple ID under its **Settings** tab.
+
+> **On iOS 27?** SideStore may not reach the phone with LocalDevVPN's default settings. If you get a "device endpoint" or "tunnel peer IP" error anywhere below, do the [iOS 27 connection fix](#ios-27-connection-fix) once and continue.
 
 ---
 
@@ -60,21 +70,72 @@ SideStore is the app that installs Flix. The first install needs a computer: Win
 
 ## Part 3 — Add a free movie-info key (3 min)
 
-Posters, descriptions, episode lists and search come from The Movie Database (TMDB).
+Posters, descriptions, episode lists and search come from The Movie Database (TMDB). Everyone uses their own free key.
 
 1. Sign up at [themoviedb.org](https://www.themoviedb.org/signup) and confirm your email.
-2. Go to **Settings** → **API** → **Create** → **Developer**, and fill in the short form (personal use).
-3. Copy the **API Key** or the **API Read Access Token**. Either one works.
+2. Click your profile picture → **Settings** → **API** → **Create** → **Developer**, accept the terms and fill in the short form. For the app type, choose personal use, and any short description works ("personal movie list app").
+3. Copy the **API Key** (the shorter one) or the **API Read Access Token** (the long one). Either one works.
 4. In Flix: **Settings** tab → paste it into **Movie info (TMDB)**. The home screen fills with rows.
 
-> You could instead save it as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) so it's built into the app. Because this repo is public, anyone could pull the key out of a release, so typing it into the app is better.
+Tip: do steps 1–3 on the phone in Safari, so you can copy and paste straight into Flix.
+
+> Owner only: you could save the key as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) to build it into the app. Because this repo is public, anyone could pull the key out of a release, so typing it into the app is better.
+
+---
+
+## Keeping it working
+
+- **Once a week:** apps signed with a free Apple ID **expire after 7 days**. Connect **LocalDevVPN**, open **SideStore** and tap **My Apps → Refresh All**. That restarts the 7 days. Setting a weekly phone reminder helps.
+- **Updates:** when a new version comes out, it appears in SideStore. Connect LocalDevVPN, then tap **Update** next to Flix. Your list and progress stay.
+- **App limit:** a free Apple ID allows **3 sideloaded apps at once**, and SideStore counts as one. That leaves room for Flix and one more.
+
+---
+
+## If Flix expired or won't refresh
+
+If you went more than a week without refreshing, Flix (and often SideStore too) stops opening. Your list and progress are kept, so just get the signature renewed.
+
+**If SideStore still opens:** connect **LocalDevVPN** → open **SideStore** → **My Apps** → **Refresh All**.
+
+**If SideStore won't open either:** repeat Part 1 steps 3–5 with the **newest iloader** (it installs over the old copy), then refresh as above. If Flix still won't open, open the Flix source in SideStore and tap **Get** again.
+
+**Common errors while refreshing**
+
+| Error | Fix |
+|---|---|
+| "Session expired", or asks you to log in | **SideStore → Settings** → sign out of your Apple ID → sign back in → **Refresh All**. |
+| Sign-in fails with **-22405**, **-80045** or "This action cannot be completed" | Apple changed its sign-in in Oct 2026. Update to the **newest iloader**, then use it to install a fresh SideStore and sign in again. Still failing: in iloader's settings run **Reset Anisette State** and **Delete Sorted Pairing**, then try again. Several failed tries in a row can lock you out for a few hours. |
+| "Unable to reach the device endpoint", "tunnel peer IP is not yet reachable", `DeviceEndpointNotInitialized` | Do the [iOS 27 connection fix](#ios-27-connection-fix) below. On older iOS, first try disconnecting and reconnecting LocalDevVPN and restarting the phone. |
+| "TCP port poll failed" | The **RemotePair Port** in the fix below is wrong. Look it up again (step 4), or try `49152`. |
+
+### iOS 27 connection fix
+
+LocalDevVPN 1.3 changed its addresses, and on iOS 27 SideStore can't reach the phone with the defaults. This fix comes from other SideStore users, not from SideStore itself, so it may change with future updates.
+
+**In LocalDevVPN's settings**
+
+1. **Tunnel IP:** `10.7.0.2/30`
+2. **Device IP:** `10.7.0.0/24`
+3. Tap **Disconnect**, then **Connect**.
+
+**In SideStore**
+
+4. **Settings → Experimental Features → Network Discovery → local → Remote Pairing** (`_remotepairing._tcp`) → tap the **IPv4** entry and note the **port** under "Connection" (a number like `52107`; yours will differ).
+5. **Settings → Connection Config:** turn **Use Local VPN** **off**. LocalDevVPN does that job.
+6. Set **Device IP / Endpoint** to `10.7.0.1`.
+7. Set **RemotePair Port** to the port from step 4.
+
+**Then**
+
+8. Close SideStore completely and **restart the iPhone**.
+9. Connect **LocalDevVPN** → open **SideStore** → **My Apps → Refresh All**.
 
 ---
 
 ## Using the app
 
 - **Home:** Continue Watching, My List, Trending, Popular, Top Rated and genre rows. Pull down to refresh.
-- **Title page:** **Play** / **Resume**, **My List**, and for movies **Mark Watched**. Shows get a season picker and an episode list with progress bars; **long-press an episode** to mark it watched or unwatched, or use **⋯** next to the season picker to mark a whole season.
+- **Title page:** **Play** / **Resume**, **My List**, and for movies **Mark Watched**. Shows get a season menu under **Episodes** and an episode list with progress bars; **long-press an episode** to mark it watched or unwatched, or use **⋯** next to **Episodes** to mark a whole season.
 - **Search** tab: searches TMDB. It also has a *Search on the site* button.
 - **🌐** (top right of Home): opens the site's home page.
 - **In the player:** Play opens the episode with **only the video player** on screen and tries to start it.
@@ -95,7 +156,7 @@ Posters, descriptions, episode lists and search come from The Movie Database (TM
 
 ---
 
-## Make Play open the exact page (optional, recommended)
+## Make Play open the exact page (owner, optional)
 
 Until this is set, **Play** runs a site search for the title. To go straight to the right page, open any movie and any episode on the site, tap **⋯ → Copy link**, and look at the addresses.
 
@@ -126,15 +187,7 @@ Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player"
 
 ---
 
-## Keeping it working
-
-- **Every 7 days:** apps signed with a free Apple ID expire after a week. SideStore renews them in the background. About once a week, connect **LocalDevVPN** and open **SideStore** (or tap **My Apps → Refresh All**). If Flix ever won't open, do this.
-- **Updates:** when the app code changes, a new version appears in SideStore. Connect LocalDevVPN, then tap **Update**.
-- **App limit:** a free Apple ID allows **3 sideloaded apps at once**, and SideStore counts as one. That leaves room for Flix and one more.
-
----
-
-## When the address changes
+## When the address changes (owner)
 
 **Usually: nothing to do.** The checker runs every 4 hours, and the app also checks the mirrors itself on launch. If you notice the site moved before either catches up, open **Actions** → **Check domain** → **Run workflow**.
 
@@ -154,8 +207,9 @@ Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player"
 
 | Problem | Fix |
 |---|---|
-| Flix won't open / "app no longer available" | Its 7-day signature ran out. Connect LocalDevVPN → open SideStore → **Refresh All**. |
-| SideStore says it can't connect | Connect **LocalDevVPN** first. Stay on Wi-Fi or mobile data. |
+| Flix won't open / "app no longer available" | Its 7-day signature ran out. See [If Flix expired or won't refresh](#if-flix-expired-or-wont-refresh). |
+| SideStore says it can't connect | Connect **LocalDevVPN** first and keep Wi-Fi on. On iOS 27, do the [iOS 27 connection fix](#ios-27-connection-fix). |
+| Apple ID sign-in fails in iloader or SideStore | Use the **newest iloader**. See the error table under [If Flix expired or won't refresh](#if-flix-expired-or-wont-refresh). |
 | Home screen is empty with a key message | Add the TMDB key in **Settings** (Part 3). |
 | "TMDB rejected the API key" | Re-copy the key from themoviedb.org. Paste the API Key *or* the Read Access Token, not both. |
 | Play opens a search or 404 page | Pick the right result. It's remembered after the first play. Better: set `paths` (see above). |
