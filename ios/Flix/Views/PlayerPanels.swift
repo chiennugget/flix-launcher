@@ -191,7 +191,9 @@ struct EpisodesPanel: View {
     @Query private var progress: [WatchProgress]
     @State private var season: Int
     @State private var episodes: [Episode] = []
+    @State private var episodesSeason: Int?
     @State private var loading = false
+    @State private var failed = false
 
     init(title: Title, seasons: [SeasonSummary], playing: PlayRequest,
          onPick: @escaping (PlayRequest) -> Void, onClose: @escaping () -> Void) {
@@ -246,6 +248,13 @@ struct EpisodesPanel: View {
                         LazyHStack(alignment: .top, spacing: 12) {
                             if loading && episodes.isEmpty {
                                 ProgressView().frame(width: 168, height: 94)
+                            } else if failed {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Couldn't load episodes.").font(.system(size: 14, weight: .semibold))
+                                    Button("Retry") { Task { await load() } }
+                                        .font(.system(size: 14, weight: .bold))
+                                }
+                                .frame(height: 94)
                             }
                             ForEach(episodes) { ep in
                                 card(ep).id(ep.episodeNumber)
@@ -305,15 +314,25 @@ struct EpisodesPanel: View {
             .foregroundStyle(.white)
         }
         .buttonStyle(PressableStyle(scale: 0.96))
+        .accessibilityLabel("Episode \(ep.episodeNumber), \(ep.name ?? "")")
+        .accessibilityValue(isPlaying ? "Now playing" : (saved?.isFinished == true ? "Watched" : ""))
     }
 
     private func load() async {
         guard let client = TMDB.client(userKey: tmdbKey) else { return }
         let number = season
+        if episodesSeason != number { episodes = [] }
         loading = true
+        failed = false
         defer { loading = false }
-        if let loaded = try? await client.season(title.tmdbID, number).episodes, season == number {
+        do {
+            let loaded = try await client.season(title.tmdbID, number).episodes
+            guard season == number else { return }
             withAnimation(.easeOut(duration: 0.25)) { episodes = loaded }
+            episodesSeason = number
+        } catch is CancellationError {
+        } catch {
+            if season == number, episodes.isEmpty { failed = true }
         }
     }
 }

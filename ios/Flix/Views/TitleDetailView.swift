@@ -28,6 +28,9 @@ struct TitleDetailView: View {
     @State private var episodes: [Episode] = []
     @State private var loadingEpisodes = false
     @State private var episodesFailed = false
+    /// Which season `episodes` belongs to, so a switch never shows the old list.
+    @State private var episodesSeason: Int?
+    @State private var detailError: String?
     @State private var runtime: Int?
     @State private var tab: Tab = .episodes
     @State private var visit: SiteVisit?
@@ -54,20 +57,26 @@ struct TitleDetailView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    info
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 10)
-                } header: {
-                    artwork
-                }
+            // The artwork scrolls away with the page. (A pinned header let the
+            // text slide up over it and under the clock.)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                artwork
+                info
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 10)
             }
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
+        // A solid strip behind the status bar, so scrolled text never runs under the clock.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 0).background(Color.black.ignoresSafeArea(edges: .top))
+        }
+        // Close/back stays reachable after the artwork scrolls off: the
+        // navigation bar is hidden and a full-screen cover can't be swiped away.
+        .overlay(alignment: .topTrailing) { closeButton }
         .background(Theme.card.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await loadDetail() }
@@ -96,22 +105,7 @@ struct TitleDetailView: View {
                         .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
                 }
                 .buttonStyle(PressableStyle(scale: 0.88))
-                .accessibilityLabel("Play")
-            }
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: isRoot ? "xmark" : "chevron.left")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .environment(\.colorScheme, .dark)
-                }
-                .buttonStyle(PressableStyle(scale: 0.88))
-                .padding(10)
-                .accessibilityLabel(isRoot ? "Close" : "Back")
+                .accessibilityLabel("Play \(shown.name)")
             }
             .overlay(alignment: .bottom) {
                 if let saved = resumeProgress {
@@ -119,7 +113,24 @@ struct TitleDetailView: View {
                 }
             }
             .clipped()
-            .background(Color.black.ignoresSafeArea(edges: .top))
+    }
+
+    private var closeButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: isRoot ? "xmark" : "chevron.left")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(.ultraThinMaterial, in: Circle())
+                .environment(\.colorScheme, .dark)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle(scale: 0.88))
+        .padding(5)
+        .accessibilityLabel(isRoot ? "Close" : "Back")
     }
 
     // MARK: Info
@@ -146,6 +157,14 @@ struct TitleDetailView: View {
                         .foregroundStyle(Color(white: 0.67))
                 }
                 .padding(.top, 10)
+            }
+            if let detailError {
+                HStack(spacing: 10) {
+                    Text(detailError).foregroundStyle(.secondary)
+                    Button("Retry") { Task { await loadDetail() } }
+                }
+                .font(.subheadline)
+                .padding(.top, 12)
             }
             synopsis.padding(.top, 14)
             actions.padding(.top, 18)
@@ -400,7 +419,7 @@ struct TitleDetailView: View {
     @ViewBuilder
     private var moreLikeThis: some View {
         if similar.isEmpty {
-            Text(detail == nil ? "" : "Nothing similar found.")
+            Text(detail == nil ? (detailError == nil ? "" : "Couldn't load suggestions.") : "Nothing similar found.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 20)
@@ -483,6 +502,7 @@ struct TitleDetailView: View {
 
     private func loadDetail() async {
         guard detail == nil, let client = TMDB.client(userKey: tmdbKey) else { return }
+        detailError = nil
         do {
             switch title.type {
             case .movie:
@@ -529,8 +549,10 @@ struct TitleDetailView: View {
             }
             // Keep saved copies' posters and text fresh.
             if let item, let detail { item.update(from: detail) }
+        } catch is CancellationError {
+            return
         } catch {
-            castLine = error.localizedDescription
+            detailError = error.localizedDescription
         }
         // The season task already ran (with no seasons yet), and won't run
         // again if the season picked above is the default one.
@@ -545,13 +567,18 @@ struct TitleDetailView: View {
     private func loadSeason() async {
         guard title.type == .tv, !seasons.isEmpty, let client = TMDB.client(userKey: tmdbKey) else { return }
         let number = season
+        if episodesSeason != number { episodes = [] }
         loadingEpisodes = true
         episodesFailed = false
         defer { loadingEpisodes = false }
         do {
             let loaded = try await client.season(title.tmdbID, number).episodes
             // A slower load for a season no longer picked mustn't win.
-            if season == number { episodes = loaded }
+            if season == number {
+                episodes = loaded
+                episodesSeason = number
+            }
+        } catch is CancellationError {
         } catch {
             if season == number, episodes.isEmpty { episodesFailed = true }
         }
@@ -634,6 +661,10 @@ struct EpisodeRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle(scale: 0.98))
+            .accessibilityLabel("Episode \(episode.episodeNumber), \(episode.name ?? "")")
+            .accessibilityValue(progress?.isFinished == true ? "Watched"
+                                : (progress.map { $0.fraction > 0 } == true ? "In progress" : ""))
+            .accessibilityHint("Plays the episode")
             if let overview = episode.overview, !overview.isEmpty {
                 Text(overview)
                     .font(.system(size: 13.5))

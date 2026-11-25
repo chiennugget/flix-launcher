@@ -471,6 +471,11 @@ struct HeroCard: View {
                 .clipped()
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onOpen)
+                .accessibilityElement()
+                .accessibilityLabel(title.name)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the title page")
+                .accessibilityAction(perform: onOpen)
             LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 190)
                 .allowsHitTesting(false)
@@ -537,7 +542,7 @@ struct CategoriesOverlay: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
-                .padding(.bottom, 150)
+                .padding(.bottom, 170)
             }
             .scrollIndicators(.hidden)
             Button(action: onClose) {
@@ -551,7 +556,8 @@ struct CategoriesOverlay: View {
             .scaleEffect(shown ? 1 : 0.4)
             .rotationEffect(.degrees(shown ? 0 : -90))
             .opacity(shown ? 1 : 0)
-            .padding(.bottom, 30)
+            // Clears the floating tab bar (62 pt tall), which is drawn above this screen.
+            .padding(.bottom, 84)
             .accessibilityLabel("Close")
         }
         .onAppear {

@@ -167,7 +167,12 @@ struct SearchView: View {
 
     private func loadRecommended() async {
         guard recommended.isEmpty, let client = TMDB.client(userKey: tmdbKey) else { return }
-        let list = (try? await client.titles("/trending/all/week")) ?? []
+        var list = (try? await client.titles("/trending/all/week")) ?? []
+        // One retry: this runs at first launch, often before the network is up.
+        if list.isEmpty, !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3))
+            list = (try? await client.titles("/trending/all/week")) ?? []
+        }
         withAnimation(.easeOut(duration: 0.3)) { recommended = Array(list.prefix(16)) }
     }
 
@@ -189,6 +194,9 @@ struct SearchView: View {
             error = nil
         } catch is CancellationError {
         } catch {
+            // Don't leave the previous search's results under the new query.
+            results = []
+            searched = false
             self.error = error.localizedDescription
         }
     }

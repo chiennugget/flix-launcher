@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var visit: SiteVisit?
     @State private var confirmClear = false
+    @State private var confirmForget = false
 
     var body: some View {
         NavigationStack {
@@ -80,7 +81,7 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Button("Forget remembered links") { forgetLinks() }
+                    Button("Forget remembered links", role: .destructive) { confirmForget = true }
                     Button("Clear watch history", role: .destructive) { confirmClear = true }
                 }
 
@@ -98,6 +99,12 @@ struct SettingsView: View {
             .confirmationDialog("Clear watch history and resume points?", isPresented: $confirmClear,
                                 titleVisibility: .visible) {
                 Button("Clear", role: .destructive) { clearHistory() }
+            }
+            .confirmationDialog("Forget the site page saved for every title?", isPresented: $confirmForget,
+                                titleVisibility: .visible) {
+                Button("Forget Links", role: .destructive) { forgetLinks() }
+            } message: {
+                Text("Play will open each title from domain.json's link again.")
             }
             .playerCover($visit)
         }

@@ -615,7 +615,9 @@ struct PlayerScreen: View {
             closeButton
             Button { web.webView?.goBack() } label: { Image(systemName: "chevron.left") }
                 .disabled(!web.canGoBack)
-            Button { web.webView?.reload() } label: { Image(systemName: "arrow.clockwise") }
+                .accessibilityLabel("Back")
+            Button { web.reload() } label: { Image(systemName: "arrow.clockwise") }
+                .accessibilityLabel("Reload")
             Text(current?.displayName ?? site.domain)
                 .font(.footnote.weight(.semibold))
                 .lineLimit(1)
@@ -780,7 +782,7 @@ struct PlayerScreen: View {
                 }
             }
             Button {
-                web.webView?.reload()
+                web.reload()
             } label: {
                 Label("Reload", systemImage: "arrow.clockwise")
             }
@@ -920,6 +922,10 @@ struct PlayerScreen: View {
             }
         }
         web.onTap = { toggleControls() }
+        web.onReload = {
+            resetVideoState()
+            if current != nil { beginLoading() }
+        }
         web.onPageStart = { revealTask?.cancel() }
         web.onPageFinish = {
             // Without player-only mode there's no player to wait for: show the
@@ -1010,12 +1016,17 @@ struct PlayerScreen: View {
         }
     }
 
+    /// A new page or player is loading: forget the old video, and let the
+    /// saved position be applied again once the new one is ready. (Without
+    /// this, switching players started over at 0:00 and then overwrote the
+    /// saved position.)
     private func resetVideoState() {
         videoFrame = nil
         videoTime = 0
         videoDuration = 0
         videoRate = 1
         scrubbing = nil
+        resumedKey = nil
     }
 
     // MARK: Autoplay next episode
@@ -1120,6 +1131,7 @@ struct PlayerScreen: View {
     private func urlChanged(_ url: URL) {
         if let n = site.player(in: url), n != player {
             player = n
+            resetVideoState()
             armFallback()
         }
         guard let request = current, request.title.type == .tv,
@@ -1127,6 +1139,8 @@ struct PlayerScreen: View {
               found.season != request.season || found.episode != request.episode else { return }
         let next = PlayRequest(title: request.title, season: found.season, episode: found.episode)
         current = next
+        cancelUpNext()
+        resetVideoState()
         armFallback()
         Task { await loadEpisodeNames(season: found.season) }
         Library.markWatched(next, progress: Library.existingProgress(key: next.progressKey, in: context), in: context)

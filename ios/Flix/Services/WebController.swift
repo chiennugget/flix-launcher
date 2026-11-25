@@ -121,7 +121,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         content.add(WeakScriptHandler(self), name: "flixPage")
         if let rules { content.add(rules) }
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = EdgeToEdgeWebView(frame: .zero, configuration: config)
+        // SwiftUI already places the view inside or over the safe area as each
+        // layout needs. Letting WebKit inset the page again shifted it toward the
+        // notch side in landscape, leaving uneven black bars around the video.
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
@@ -210,7 +214,28 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         observations = []
         webView?.stopLoading()
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
+        // The callbacks capture the player screen, which owns this controller.
+        onVideo = nil
+        onURLChange = nil
+        onFullscreen = nil
+        onTap = nil
+        onPageStart = nil
+        onPageFinish = nil
+        onPlayerFocused = nil
+        onReload = nil
     }
+
+    /// The page is starting over (reload, or WebKit restarted it).
+    var onReload: (() -> Void)?
+
+    /// Reloads the page, so the player can reset its video state first.
+    func reload() {
+        onReload?()
+        detectedPlayers = 0
+        if webView?.url != nil { webView?.reload() } else if let url = lastURL { webView?.load(URLRequest(url: url)) }
+    }
+
+    private var lastURL: URL?
 
     // MARK: Navigation rules
 
@@ -230,7 +255,14 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if let url = webView.url { lastURL = url }
         onPageStart?()
+    }
+
+    /// iOS can end the web process while the app is in the background (or it
+    /// can crash), which leaves a blank black page. Load it again.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        reload()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -276,6 +308,12 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         onVideo?(VideoEvent(kind: kind, time: time, duration: duration, paused: paused,
                             rate: rate.isFinite && rate > 0 ? rate : 1, frame: message.frameInfo))
     }
+}
+
+/// A web view that never reports a safe area, so WebKit lays the page out
+/// over its whole frame and the player's letterboxing stays centred.
+private final class EdgeToEdgeWebView: WKWebView {
+    override var safeAreaInsets: UIEdgeInsets { .zero }
 }
 
 /// Breaks the retain cycle between WKUserContentController and its handler.

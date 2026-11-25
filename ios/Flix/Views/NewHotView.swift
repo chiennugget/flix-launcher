@@ -8,11 +8,12 @@ final class NewHotModel: ObservableObject {
     @Published private(set) var topShows: [Title] = []
     @Published private(set) var topMovies: [Title] = []
     @Published private(set) var loading = false
+    @Published private(set) var failed = false
     private var loadedKey: String?
 
-    func load(key: String) async {
-        guard let client = TMDB.client(userKey: key), loadedKey != key else { return }
-        loadedKey = key
+    func load(key: String, force: Bool = false) async {
+        guard let client = TMDB.client(userKey: key), force || loadedKey != key else { return }
+        failed = false
         loading = true
         defer { loading = false }
         let today = HomeModel.today
@@ -38,6 +39,11 @@ final class NewHotModel: ObservableObject {
             topShows = Array(s.filter { $0.backdropPath != nil }.prefix(10))
             topMovies = Array(m.filter { $0.backdropPath != nil }.prefix(10))
         }
+        // Only count it as loaded if something came back, so a launch while
+        // offline doesn't leave the tab empty for good.
+        let empty = soon.isEmpty && watching.isEmpty && topShows.isEmpty && topMovies.isEmpty
+        loadedKey = empty ? nil : key
+        failed = empty
     }
 }
 
@@ -89,12 +95,23 @@ struct NewHotView: View {
                         }
                         if model.loading && model.soon.isEmpty {
                             SkeletonRows()
+                        } else if model.failed {
+                            VStack(spacing: 10) {
+                                Text("Couldn't load New & Hot.").font(.system(size: 17, weight: .bold))
+                                Text("Check your connection and try again.")
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                                Button("Retry") { Task { await model.load(key: tmdbKey, force: true) } }
+                                    .buttonStyle(.bordered)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
                         }
                         Color.clear.frame(height: 110)
                     }
                 }
                 .coordinateSpace(name: space)
                 .scrollIndicators(.hidden)
+                .refreshable { await model.load(key: tmdbKey, force: true) }
                 .onPreferenceChange(SectionTopsKey.self) { tops in
                     guard !jumping else { return }
                     let current = Section.allCases.last { (tops[$0.rawValue] ?? .infinity) <= 110 } ?? .soon
