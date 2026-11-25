@@ -158,7 +158,7 @@ struct NewHotView: View {
         .foregroundStyle(on ? .black : .white)
         .padding(.horizontal, 13)
         .frame(height: 33)
-        .background(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(.ultraThinMaterial), in: Capsule())
+        .background(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(Material.ultraThinMaterial), in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(on ? 0 : 0.2), lineWidth: 1))
     }
 
