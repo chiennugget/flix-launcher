@@ -1,84 +1,94 @@
-# Handoff: bug fixes on the redesign
+# Handoff: after the redesign and QA release
 
-Notes for a Claude Code session running on the owner's Mac, picking up from
-a cloud session that couldn't run the app. Delete this file once the work
-below is done.
+Notes for the next Claude Code session. Delete this file once the open items
+below are done.
 
 ## Where things are
 
-- **Redesign:** branch `claude/gifted-mccarthy-8cu84k` (Netflix-style UI). Not merged into `main` yet.
-- **Bug fixes:** branch `claude/clever-brahmagupta-puan00`, on top of the redesign.
-  PR: https://github.com/chiennugget/flix-launcher/pull/14 (base: the redesign branch).
-  The owner wants to test first, so **don't merge it**. This overrides CLAUDE.md's
-  auto-merge rule for this work.
-- CI build 29 for that PR was cancelled before it ran (no macOS runner); it was re-run once.
-  The fixes have **never been compiled**. Build in Xcode first and fix any errors.
+- **Everything is on `main`.** PR #14 (https://github.com/chiennugget/flix-launcher/pull/14)
+  was pointed at `main` and squash-merged as `d1b4a37`. It carried the Netflix-style
+  redesign, the first round of bug fixes and the QA fixes below. Release build 33
+  (version 1.0.33) was published from it.
+- The old branches `claude/gifted-mccarthy-8cu84k` (redesign) and
+  `claude/clever-brahmagupta-puan00` (fixes) are fully merged and can be deleted.
+- Start new work from the latest `main` (see CLAUDE.md).
 
 ## Build and run locally
 
 ```bash
-cd ios && xcodegen generate && open Flix.xcodeproj
-```
-
-Or from the command line, for the simulator:
-
-```bash
 cd ios && xcodegen generate && xcodebuild -project Flix.xcodeproj -scheme Flix \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -derivedDataPath build build
+  -destination 'platform=iOS Simulator,name=iPhone 17e' -derivedDataPath build build
 ```
 
-- Local builds have no TMDB key. Paste one in the app: My Flix → ☰ → Settings.
-- `xcrun simctl io booted screenshot shot.png` takes a screenshot. Rotate the simulator
-  with ⌘← / ⌘→ to check landscape.
+- Xcode and simulators are installed on the owner's Mac, so local builds work
+  (CLAUDE.md's "builds only on CI" no longer holds).
+- Local builds have no TMDB key. Paste one in the app (My Flix → ☰ → Settings) or write
+  it into the simulator's defaults:
+  `xcrun simctl spawn <device> defaults write io.github.chiennugget.flix tmdbKey <key>`.
+  Never commit the key.
+- There are no automated tests; the build is the only automatic check.
 - Injected JavaScript (`Scripts.*` in `ios/Flix/Services/WebController.swift`) isn't
-  compiled by Xcode: extract each script and run `node --check` on it.
+  compiled by Xcode: extract each `#"""…"""#` script and run `node --check` on it.
 
-## Already fixed in PR #14 (check these in the simulator)
+### Simulator pitfalls
 
-1. **Title page art pinned while scrolling** (`TitleDetailView.swift`): it was a pinned
-   section header, so text slid over it and under the clock. The art now scrolls with
-   the page, a black strip sits behind the status bar, and close/back floats at the top right.
-2. **Uneven black bars around the video in landscape** (`WebController.swift`): the web
-   view now reports no safe area (`EdgeToEdgeWebView`) and uses
-   `contentInsetAdjustmentBehavior = .never`. **Needs checking**: open an episode,
-   rotate, and compare the left and right bars.
-3. **Switching players lost the resume point** (`PlayerScreen.swift`, `resetVideoState`
-   clears `resumedKey`).
-4. The page reloads if iOS ends the web process; the web controller's callbacks are
-   cleared on teardown.
-5. Stale episodes after a season switch (title page and player strip); the player strip
-   now has a failed state and Retry.
-6. Retry when TMDB fails on the title page; New & Hot recovers after an offline launch;
-   failed searches clear old results; the categories close button clears the tab bar;
-   confirmation before "Forget remembered links"; VoiceOver labels.
+- **Don't rotate the simulator by hand before testing the player.** The player forces
+  landscape itself; if the device was rotated earlier, the screenshot frame and tap
+  coordinates stop matching and taps land in the wrong place. Rotate back to portrait,
+  or reboot the simulator, if taps in the player seem to do nothing.
+- Wait for scroll animations to stop before tapping a tile, or the tap is eaten.
 
-## To do next (owner's reports, not started)
+## Fixed in the QA pass (in 1.0.33)
 
-The owner asked to test PR #14 first. Ask before starting these.
+- Home: filter switches happen in one step (no jitter); scroll back to top on filter
+  change; the header background and pill hiding work on iOS 18+
+  (`onScrollOffsetChange` in `Components.swift`); the hero card type-checks.
+- Search: the keyboard no longer pushes the field under the clock or lifts the tab bar;
+  recommendation errors show with Retry.
+- Title pages: swipe-back on pushed pages (`UINavigationController` extension in
+  `RootView.swift`); season switches keep the old list dimmed until the new one loads.
+- Player: the site player's control bar and title are hidden while Flix's controls are
+  on (`setSiteControlsHidden` / `__flixHideControls`, passed down to frames by
+  `postMessage`); progress saves on pause, end, close and every 30 s; the loading cover's
+  close button fits in landscape; "Try Player 2" isn't cut off.
+- New & Hot shows the real error and hides empty headings; a blank profile name falls
+  back to "You".
 
-1. **The player shows the site's controls as well as Flix's.** Lead: the video plays in
-   a cross-origin player iframe whose control bar comes from the player (JW Player,
-   Video.js, Plyr…). `Scripts.focus` only hides the main page. Hide that control bar
-   inside the frames while Flix's controls are on (`Scripts.video` runs in every frame),
-   and show it again for "Use the site's controls".
-2. **Changing the season in the player's Episodes panel doesn't change the list.**
-   Lead (unconfirmed): `PlayerScreen` redraws about every 500 ms from video "tick"
-   events, which may reset the season `Menu`/`Picker` in `EpisodesPanel`
-   (`PlayerPanels.swift`). First check whether PR #14 changed anything, then reproduce
-   it in the simulator.
-3. **Tapping Series/Films on Home makes the page jitter**: things jump off screen, then
-   come back. Lead: `setFilter` animates with a spring while the pills use
-   `.move(edge: .leading)` transitions. Meanwhile `HomeModel.load` empties
-   `rows`/`hero`, the scroll content shrinks, and `scrolled(to:)` toggles
-   `pillsHidden` (`HomeView.swift`). Reproduce it, then switch filters in one clean step.
-4. **Feature: start the player faster.** `WebWarmup` only loads a blank page at launch,
-   which didn't help. Idea: at launch, build a web view with the player's full
-   configuration (content rules, user scripts) and load the site once in the background
-   (DNS/TLS, cache, cookies or bot check). Then hand that view to `PlayerScreen` when
-   the first title is played. Make this its own commit.
+## Fixed in the second QA pass (PRs #15 and #16)
+
+- Player: any site player's controls hide while Flix's are on, whatever its class names.
+  Each frame marks its main video (or the iframe that holds it) and its parents with
+  `data-flix-keep` and hides everything else. P3 (vidy.st, vidcore.io) showed both sets
+  before. Data attributes, because the site's React code rewrites `className`.
+- Player: the landscape floating bar lost its tap gesture, which blocked its buttons.
+  Captions move up while Flix's controls are showing (`__flixLift`).
+- Home: a category picked inside Series or Films keeps that choice. Finished movies leave
+  Continue Watching (Home and My Flix).
+- Search: cancelled requests no longer surface as errors; long queries stay on two lines.
+- New & Hot: section jumps land below the header (`safeAreaPadding`, not a spacer).
+- Settings: a whitespace-only profile name is trimmed. Mark Watched and mark season save
+  at once. The site browser shows one close button while loading.
+
+## Still open
+
+1. **Check on a real iPhone** (the simulator's taps in the forced-landscape player keep
+   drifting out of sync, even after a reboot): Flix's controls only on P1 to P5, playing
+   and paused; "Use the site's controls", then "Flix controls" in the floating bar;
+   captions moving up while the controls show.
+2. **P2 subtitles**: picking English in Audio & Subtitles showed no captions during
+   dialogue in one try. Unconfirmed.
+3. **P2 while loading**: the site's server button and "Fetching your content" spinner
+   show under Flix's controls until a video exists. Left as is.
+4. **A finished series** stays in Continue Watching at its last episode (only movies are
+   hidden). Hiding it needs the season count.
+5. **Feature: start the player faster** (not started). `WebWarmup` only loads a blank
+   page. Idea: at launch, build a web view with the player's full configuration and load
+   the site once in the background, then hand it to `PlayerScreen`. Own commit.
+6. Owner's report that the player's Episodes panel ignores a season change didn't
+   reproduce (Season 2 → 4 worked). Ask the owner for steps if it comes back.
 
 ## Possible improvement
 
 A beta channel: publish `claude/**` branch builds as a pre-release with their own
 `apps-beta.json` (`.github/workflows/build-ios.yml`, `ios/scripts/make_source.py`), so
-test builds reach SideStore without merging. This is only an idea; ask the owner first.
+test builds reach SideStore without merging. Only an idea; ask the owner first.
