@@ -502,6 +502,7 @@ struct TitleDetailView: View {
             Library.markWatched(first, progress: Library.existingProgress(key: first.progressKey, in: context),
                                 in: context)
         }
+        try? context.save()
     }
 
     private func toggleWatchlist() {

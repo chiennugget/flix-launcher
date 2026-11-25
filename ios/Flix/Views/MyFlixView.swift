@@ -33,8 +33,9 @@ struct MyFlixView: View {
                     VStack(alignment: .leading, spacing: 26) {
                         Color.clear.frame(height: 40)
                         profile
-                        if !history.isEmpty {
-                            ContinueRow(items: Array(history.prefix(20)))
+                        let resume = history.filter { !$0.isFinishedMovie }
+                        if !resume.isEmpty {
+                            ContinueRow(items: Array(resume.prefix(20)))
                         }
                         myList
                         if !liked.isEmpty {

@@ -20,6 +20,9 @@ struct SettingsView: View {
                 Section("Profile") {
                     TextField("Profile name", text: $profileName)
                         .textInputAutocapitalization(.words)
+                        // Spaces alone left an empty-looking field with no
+                        // placeholder; stray spaces never belong in the name.
+                        .onSubmit { trimProfileName() }
                 }
 
                 Section {
@@ -108,6 +111,8 @@ struct SettingsView: View {
             }
             .playerCover($visit)
         }
+        .onAppear { trimProfileName() }
+        .onDisappear { trimProfileName() }
     }
 
     private var version: String {
@@ -115,6 +120,11 @@ struct SettingsView: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(short) (\(build))"
+    }
+
+    private func trimProfileName() {
+        let trimmed = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != profileName { profileName = trimmed }
     }
 
     private func describe(_ template: String?) -> String {

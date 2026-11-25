@@ -195,6 +195,12 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         baseScripts.forEach(content.addUserScript)
     }
 
+    /// Moves the site's captions up (true) while Flix's controls cover the bottom.
+    func setCaptionsLifted(_ lifted: Bool) {
+        webView?.evaluateJavaScript("window.__flixLift && window.__flixLift(\(lifted))",
+                                    in: nil, in: .page, completionHandler: nil)
+    }
+
     func setPlayerOnly(_ on: Bool) {
         playerOnly = on
         applyPlayerOnly()
@@ -547,6 +553,23 @@ enum Scripts {
           style.remove();
         }
       }
+      // While Flix's controls are showing, captions move up off its scrubber.
+      var liftCSS = 'video::-webkit-media-text-track-container, ' + capSel +
+        ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }';
+      window.__flixLift = function (on) {
+        var style = document.getElementById('flix-lift-captions');
+        if (on && !style) {
+          style = document.createElement('style');
+          style.id = 'flix-lift-captions';
+          style.textContent = liftCSS;
+          (document.head || document.documentElement).appendChild(style);
+        } else if (!on && style) {
+          style.remove();
+        }
+        for (var i = 0; i < window.frames.length; i++) {
+          try { window.frames[i].postMessage({ __flixLift: on ? 1 : 0 }, '*'); } catch (e) {}
+        }
+      };
       // Frames are on other sites, so the setting travels down by postMessage.
       window.__flixHideControls = function (on) {
         window.__flixHideSiteControls = on;
@@ -560,6 +583,7 @@ enum Scripts {
         if (d && (d.__flixControls === 'hide' || d.__flixControls === 'show')) {
           window.__flixHideControls(d.__flixControls === 'hide');
         }
+        if (d && (d.__flixLift === 0 || d.__flixLift === 1)) window.__flixLift(d.__flixLift === 1);
         // The top page is handled by player-only mode, so only wrapper frames mark the iframe.
         if (d && d.__flixVideoFrame === 1 && window !== window.top) {
           var frames = document.getElementsByTagName('iframe');
