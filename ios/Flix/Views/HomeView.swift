@@ -511,7 +511,7 @@ struct HeroCard: View {
             .accessibilityLabel(title.name)
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("Opens the title page")
-            .accessibilityAction(perform: onOpen)
+            .accessibilityAction { onOpen() }
     }
 
     private var tagLine: some View {
