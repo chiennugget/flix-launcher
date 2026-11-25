@@ -147,7 +147,9 @@ struct PlayerScreen: View {
                 floatingControls
                     .opacity(controlsVisible ? 1 : 0)
                     .allowsHitTesting(controlsVisible)
-                    .simultaneousGesture(TapGesture().onEnded { showControls() })
+                    // No tap gesture on the bar itself: with a simultaneous
+                    // TapGesture here, the bar's Buttons stopped responding
+                    // in the iOS 27 simulator (its Menus still opened).
             }
         }
         .overlay {

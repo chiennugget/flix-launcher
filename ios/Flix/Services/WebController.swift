@@ -379,6 +379,10 @@ enum Scripts {
         var lastTick = 0;
         function report(kind) {
           if (!isFinite(v.duration) || v.duration < 60) return;
+          if (window !== window.top && (!keepEl || !keepEl.isConnected || keepEl.tagName !== 'VIDEO' ||
+              keepEl === v || v.duration > keepEl.duration)) {
+            if (markKeep(v) || kind === 'ready') announce();
+          }
           post({ type: kind, t: v.currentTime, d: v.duration, p: v.paused ? 1 : 0, r: v.playbackRate || 1 });
         }
         function tick(force) {
@@ -405,6 +409,7 @@ enum Scripts {
       function scan() {
         var videos = document.getElementsByTagName('video');
         for (var i = 0; i < videos.length; i++) hook(videos[i]);
+        if (keepEl) markCaptions();
       }
       function mainVideo() {
         var videos = document.getElementsByTagName('video'), best = null;
@@ -500,7 +505,37 @@ enum Scripts {
         '#vs-bar', '#vs-title'
       ].join(',') + ' { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }' +
         ' video::-webkit-media-controls, video::-webkit-media-controls-start-playback-button' +
-        ' { display: none !important; }';
+        ' { display: none !important; }' +
+        // Players with unknown or generated class names: once a frame knows
+        // where the video is (the video itself, or the iframe that holds it),
+        // everything else in that frame is hidden. Caption layers stay.
+        // Data attributes, not classes: frameworks like React rewrite className.
+        ' html[data-flix-haskeep] *:not([data-flix-keep]):not([data-flix-cap]):not([data-flix-cap] *)' +
+        ' { visibility: hidden !important; pointer-events: none !important; }';
+      var capSel = '.jw-captions, .jw-text-track-container, .vjs-text-track-display, .plyr__captions, ' +
+        '.art-subtitle, .dplayer-subtitle, .mejs__captions-layer, .fluid_subtitles_container';
+      var keepEl = null;
+      function markKeep(el) {
+        if (keepEl === el && el.isConnected && el.hasAttribute('data-flix-keep') &&
+            (!el.parentElement || el.parentElement.hasAttribute('data-flix-keep'))) return false;
+        var old = document.querySelectorAll('[data-flix-keep]');
+        for (var i = 0; i < old.length; i++) old[i].removeAttribute('data-flix-keep');
+        keepEl = el;
+        for (var p = el; p && p !== document.documentElement; p = p.parentElement) p.setAttribute('data-flix-keep', '');
+        document.documentElement.setAttribute('data-flix-haskeep', '');
+        markCaptions();
+        return true;
+      }
+      function markCaptions() {
+        var caps = document.querySelectorAll(capSel);
+        for (var i = 0; i < caps.length; i++) caps[i].setAttribute('data-flix-cap', '');
+      }
+      // Tell the frame above which of its iframes holds the video.
+      function announce() {
+        if (window !== window.top) {
+          try { window.parent.postMessage({ __flixVideoFrame: 1 }, '*'); } catch (e) {}
+        }
+      }
       function applyHide(on) {
         var style = document.getElementById('flix-hide-controls');
         if (on && !style) {
@@ -524,6 +559,13 @@ enum Scripts {
         var d = e.data;
         if (d && (d.__flixControls === 'hide' || d.__flixControls === 'show')) {
           window.__flixHideControls(d.__flixControls === 'hide');
+        }
+        // The top page is handled by player-only mode, so only wrapper frames mark the iframe.
+        if (d && d.__flixVideoFrame === 1 && window !== window.top) {
+          var frames = document.getElementsByTagName('iframe');
+          for (var i = 0; i < frames.length; i++) {
+            if (frames[i].contentWindow === e.source) { markKeep(frames[i]); announce(); break; }
+          }
         }
       });
       if (window.__flixHideSiteControls === true) applyHide(true);
