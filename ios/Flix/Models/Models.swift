@@ -15,6 +15,10 @@ struct Title: Identifiable, Hashable, Codable {
     var backdropPath: String?
     var year: String?
     var rating: Double?
+    /// TMDB genre ids, for the "Series • Drama • Crime" tag lines.
+    var genreIDs: [Int]? = nil
+    /// Full release or first-air date (yyyy-mm-dd), for Coming Soon.
+    var date: String? = nil
 
     var key: String { "\(type.rawValue):\(tmdbID)" }
     var id: String { key }
@@ -222,4 +226,25 @@ enum Library {
         item.resumeLabel = [request.episodeLabel, left].compactMap { $0 }.joined(separator: " · ")
         item.resumeFraction = progress.fraction
     }
+}
+
+/// Thumbs ratings (1 not for me, 2 like, 3 love), kept on this phone.
+@MainActor
+final class RatingStore: ObservableObject {
+    @Published private(set) var ratings: [String: Int]
+    private static let defaultsKey = "ratings"
+
+    init() {
+        ratings = (UserDefaults.standard.dictionary(forKey: Self.defaultsKey) as? [String: Int]) ?? [:]
+    }
+
+    func rating(for key: String) -> Int { ratings[key] ?? 0 }
+
+    /// Picking the current rating again clears it.
+    func toggle(_ value: Int, for key: String) {
+        ratings[key] = ratings[key] == value ? nil : value
+        UserDefaults.standard.set(ratings, forKey: Self.defaultsKey)
+    }
+
+    var likedKeys: Set<String> { Set(ratings.filter { $0.value >= 2 }.keys) }
 }

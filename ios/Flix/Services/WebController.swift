@@ -45,7 +45,22 @@ struct VideoEvent {
     let kind: String
     let time: Double
     let duration: Double
+    var paused = false
+    var rate = 1.0
     let frame: WKFrameInfo
+}
+
+/// Caption and audio tracks of the playing video, as the page reports them.
+struct MediaTracks: Decodable {
+    struct Track: Decodable, Identifiable, Hashable {
+        let i: Int
+        let l: String
+        let on: Bool
+        var id: Int { i }
+    }
+
+    var text: [Track] = []
+    var audio: [Track] = []
 }
 
 /// Owns the site's web view: blocks pop-ups and off-site redirects, and
@@ -168,6 +183,29 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
                                     in: frame, in: .page, completionHandler: nil)
     }
 
+    /// Drives the video in the frame that reported it: toggle, seek, skip,
+    /// rate, text (caption track, -1 for off) or audio.
+    func command(_ name: String, _ arg: Double = 0, in frame: WKFrameInfo) {
+        webView?.evaluateJavaScript("window.__flixCmd && window.__flixCmd('\(name)', \(arg))",
+                                    in: frame, in: .page, completionHandler: nil)
+    }
+
+    func tracks(in frame: WKFrameInfo) async -> MediaTracks {
+        guard let webView else { return MediaTracks() }
+        return await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript("window.__flixCmd ? window.__flixCmd('tracks', 0) : ''",
+                                       in: frame, in: .page) { result in
+                if case .success(let value) = result, let text = value as? String,
+                   let data = text.data(using: .utf8),
+                   let tracks = try? JSONDecoder().decode(MediaTracks.self, from: data) {
+                    continuation.resume(returning: tracks)
+                } else {
+                    continuation.resume(returning: MediaTracks())
+                }
+            }
+        }
+    }
+
     func teardown() {
         observations = []
         webView?.stopLoading()
@@ -233,7 +271,10 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
               let time = (body["t"] as? NSNumber)?.doubleValue,
               let duration = (body["d"] as? NSNumber)?.doubleValue,
               time.isFinite, duration.isFinite, duration > 0 else { return }
-        onVideo?(VideoEvent(kind: kind, time: time, duration: duration, frame: message.frameInfo))
+        let paused = (body["p"] as? NSNumber)?.boolValue ?? false
+        let rate = (body["r"] as? NSNumber)?.doubleValue ?? 1
+        onVideo?(VideoEvent(kind: kind, time: time, duration: duration, paused: paused,
+                            rate: rate.isFinite && rate > 0 ? rate : 1, frame: message.frameInfo))
     }
 }
 
@@ -253,8 +294,9 @@ private final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
 
 enum Scripts {
     /// Injected into every frame, including cross-site player embeds. Reports
-    /// playback of real videos (over a minute, so short ad clips are ignored)
-    /// and exposes __flixSeek for resuming.
+    /// playback of real videos (over a minute, so short ad clips are ignored),
+    /// with a quick "tick" for the app's scrubber, and exposes __flixSeek for
+    /// resuming and __flixCmd for the app's own controls.
     static let video = #"""
     (function () {
       if (window.__flixHooked) return;
@@ -273,17 +315,29 @@ enum Scripts {
           v.setAttribute('webkit-playsinline', '');
         }
         var last = 0;
+        var lastTick = 0;
         function report(kind) {
           if (!isFinite(v.duration) || v.duration < 60) return;
-          post({ type: kind, t: v.currentTime, d: v.duration });
+          post({ type: kind, t: v.currentTime, d: v.duration, p: v.paused ? 1 : 0, r: v.playbackRate || 1 });
         }
+        function tick(force) {
+          var now = Date.now();
+          if (!force && now - lastTick < 500) return;
+          lastTick = now;
+          report('tick');
+        }
+        v.__flixTick = tick;
         v.addEventListener('loadedmetadata', function () { report('ready'); });
         v.addEventListener('durationchange', function () { report('ready'); });
         v.addEventListener('timeupdate', function () {
+          tick(false);
           var now = Date.now();
           if (now - last > 5000) { last = now; report('progress'); }
         });
-        v.addEventListener('pause', function () { report('progress'); });
+        v.addEventListener('play', function () { tick(true); });
+        v.addEventListener('pause', function () { report('progress'); tick(true); });
+        v.addEventListener('ratechange', function () { tick(true); });
+        v.addEventListener('seeked', function () { tick(true); });
         v.addEventListener('ended', function () { report('ended'); });
         if (v.readyState >= 1) report('ready');
       }
@@ -291,6 +345,53 @@ enum Scripts {
         var videos = document.getElementsByTagName('video');
         for (var i = 0; i < videos.length; i++) hook(videos[i]);
       }
+      function mainVideo() {
+        var videos = document.getElementsByTagName('video'), best = null;
+        for (var i = 0; i < videos.length; i++) {
+          var v = videos[i];
+          if (isFinite(v.duration) && v.duration >= 60 && (!best || v.duration > best.duration)) best = v;
+        }
+        return best;
+      }
+      function isText(t) { return t.kind === 'subtitles' || t.kind === 'captions'; }
+      function trackList(v) {
+        var out = { text: [], audio: [] };
+        var tt = v.textTracks || [];
+        for (var i = 0; i < tt.length; i++) {
+          if (isText(tt[i])) {
+            out.text.push({ i: i, l: tt[i].label || tt[i].language || ('Subtitles ' + (i + 1)), on: tt[i].mode === 'showing' });
+          }
+        }
+        var at = v.audioTracks;
+        if (at) {
+          for (var j = 0; j < at.length; j++) {
+            out.audio.push({ i: j, l: at[j].label || at[j].language || ('Audio ' + (j + 1)), on: !!at[j].enabled });
+          }
+        }
+        return out;
+      }
+      window.__flixCmd = function (cmd, arg) {
+        var v = mainVideo();
+        if (!v) return '';
+        if (cmd === 'tracks') return JSON.stringify(trackList(v));
+        if (cmd === 'toggle') {
+          if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else { v.pause(); }
+        } else if (cmd === 'seek') {
+          v.currentTime = Math.max(0, Math.min(v.duration - 1, arg));
+        } else if (cmd === 'skip') {
+          v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + arg));
+        } else if (cmd === 'rate') {
+          v.playbackRate = arg;
+        } else if (cmd === 'text') {
+          var tt = v.textTracks || [];
+          for (var k = 0; k < tt.length; k++) { if (isText(tt[k])) tt[k].mode = (k === arg) ? 'showing' : 'disabled'; }
+        } else if (cmd === 'audio') {
+          var at = v.audioTracks;
+          if (at) { for (var j = 0; j < at.length; j++) at[j].enabled = (j === arg); }
+        }
+        if (v.__flixTick) v.__flixTick(true);
+        return '';
+      };
       window.__flixSeek = function (t) {
         var videos = document.getElementsByTagName('video');
         for (var i = 0; i < videos.length; i++) {
