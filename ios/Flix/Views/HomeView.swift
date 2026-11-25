@@ -466,16 +466,7 @@ struct HeroCard: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.clear
-                .overlay { PosterImage(path: title.posterPath, name: title.name, size: "w780") }
-                .clipped()
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onOpen)
-                .accessibilityElement()
-                .accessibilityLabel(title.name)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Opens the title page")
-                .accessibilityAction(perform: onOpen)
+            artwork
             LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 190)
                 .allowsHitTesting(false)
@@ -507,6 +498,20 @@ struct HeroCard: View {
         .zoomSource("hero-\(title.key)", in: zoom)
         .shadow(color: .black.opacity(0.55), radius: 25, y: 18)
         .padding(.horizontal, 22)
+    }
+
+    /// The poster opens the title page; a button for VoiceOver too.
+    private var artwork: some View {
+        Color.clear
+            .overlay { PosterImage(path: title.posterPath, name: title.name, size: "w780") }
+            .clipped()
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .accessibilityElement()
+            .accessibilityLabel(title.name)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the title page")
+            .accessibilityAction(perform: onOpen)
     }
 
     private var tagLine: some View {
