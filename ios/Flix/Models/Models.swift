@@ -115,6 +115,9 @@ final class LibraryItem {
         resumeFraction = 0
     }
 
+    /// A movie watched to the end: nothing left to continue.
+    var isFinishedMovie: Bool { typeRaw == MediaType.movie.rawValue && resumeFraction >= 0.95 }
+
     var asTitle: Title {
         Title(tmdbID: tmdbID, type: MediaType(rawValue: typeRaw) ?? .movie, name: name,
               overview: overview, posterPath: posterPath, backdropPath: backdropPath,
@@ -208,6 +211,8 @@ enum Library {
         if watched || (item.inHistory && isLast) {
             markWatched(request, progress: progress, in: context)
         }
+        // SwiftData's autosave can lag; a hard kill right after the tap lost it.
+        try? context.save()
     }
 
     /// Records that a request was opened or played, for Continue Watching.

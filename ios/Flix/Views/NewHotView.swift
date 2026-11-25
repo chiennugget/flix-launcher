@@ -82,7 +82,6 @@ struct NewHotView: View {
                 Color.black.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        Color.clear.frame(height: 100)
                         if TMDB.client(userKey: tmdbKey) == nil {
                             KeyMissingCard()
                         }
@@ -121,6 +120,9 @@ struct NewHotView: View {
                     }
                 }
                 .coordinateSpace(name: space)
+                // Room for the header as a safe area, not a spacer, so jumping
+                // to a section lands below the header instead of under it.
+                .safeAreaPadding(.top, 100)
                 .scrollIndicators(.hidden)
                 .refreshable { await model.load(key: tmdbKey, force: true) }
                 .onPreferenceChange(SectionTopsKey.self) { tops in

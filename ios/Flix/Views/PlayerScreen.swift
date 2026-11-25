@@ -115,6 +115,8 @@ struct PlayerScreen: View {
         .onChange(of: landscape || fullscreen, initial: true) { showControls() }
         // The site's own control bar hides while Flix's controls are on.
         .onChange(of: flixControls, initial: true) { web.setSiteControlsHidden(flixControls) }
+        // Captions move up while Flix's scrubber and buttons cover the bottom.
+        .onChange(of: flixControls && controlsVisible && !loading) { _, lifted in web.setCaptionsLifted(lifted) }
         .onChange(of: scrubbing == nil) {
             if scrubbing != nil { hideControlsTask?.cancel() }
         }
@@ -221,13 +223,17 @@ struct PlayerScreen: View {
         }
         .clipped()
         .overlay(alignment: .topLeading) {
-            Button { close() } label: {
-                Image(systemName: "xmark").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
+            // Only when no bar above already offers a close button (opening the
+            // site itself showed two X's, one under the other).
+            if flixControls || landscape || fullscreen {
+                Button { close() } label: {
+                    Image(systemName: "xmark").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .padding(.leading, 14)
+                .padding(.top, 10)
+                .accessibilityLabel("Close")
             }
-            .padding(.leading, 14)
-            .padding(.top, 10)
-            .accessibilityLabel("Close")
         }
     }
 

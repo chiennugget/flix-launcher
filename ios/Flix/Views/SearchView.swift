@@ -151,6 +151,9 @@ struct SearchView: View {
             } label: {
                 Label("Search “\(trimmed)” on the site", systemImage: "globe")
                     .font(.system(size: 14, weight: .semibold))
+                    // A very long query would otherwise push the results far down.
+                    .lineLimit(2)
+                    .truncationMode(.middle)
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -225,6 +228,9 @@ struct SearchView: View {
             error = nil
         } catch is CancellationError {
         } catch {
+            // A newer keystroke cancelled this request (URLSession reports that
+            // as URLError.cancelled): the newer search owns the screen now.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { return }
             // Don't leave the previous search's results under the new query.
             results = []
             searched = false

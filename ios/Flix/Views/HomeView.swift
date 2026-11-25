@@ -5,7 +5,18 @@ import SwiftUI
 final class HomeModel: ObservableObject {
     enum Filter: Hashable {
         case all, tv, movie
-        case category(HomeCategory)
+        /// A category, within Series or Films when one of those was picked first.
+        case category(HomeCategory, MediaType?)
+
+        /// Series or Films, also when a category is picked inside it.
+        var type: MediaType? {
+            switch self {
+            case .all: return nil
+            case .tv: return .tv
+            case .movie: return .movie
+            case .category(_, let t): return t
+            }
+        }
     }
 
     struct Row: Identifiable {
@@ -87,7 +98,11 @@ final class HomeModel: ObservableObject {
                 Spec(id: "mv-romance", name: "Romance", path: "/discover/movie", query: discover(.movie, 10749), type: .movie),
                 Spec(id: "mv-animation", name: "Animation", path: "/discover/movie", query: discover(.movie, 16), type: .movie),
             ]
-        case .category(let c):
+        case .category(let category, let only):
+            // Inside Series or Films, only that kind's genre counts.
+            let c = HomeCategory(name: category.name,
+                                 movie: only == .tv ? nil : category.movie,
+                                 tv: only == .movie ? nil : category.tv)
             var specs: [Spec] = []
             if let g = c.tv {
                 specs.append(Spec(id: "cat-tv", name: "Popular \(c.name) Shows", path: "/discover/tv",
@@ -275,9 +290,14 @@ struct HomeView: View {
         }
         .overlay {
             if showCategories {
-                CategoriesOverlay(selected: selectedCategory) { picked in
+                CategoriesOverlay(selected: selectedCategory, type: filter.type) { picked in
                     withAnimation(.easeOut(duration: 0.2)) { showCategories = false }
-                    if let picked { setFilter(.category(picked)) } else { setFilter(.all) }
+                    let type = filter.type
+                    if let picked {
+                        setFilter(.category(picked, type))
+                    } else {
+                        setFilter(type == .tv ? .tv : type == .movie ? .movie : .all)
+                    }
                 } onClose: {
                     withAnimation(.easeOut(duration: 0.2)) { showCategories = false }
                 }
@@ -347,12 +367,12 @@ struct HomeView: View {
                 .transition(.scale.combined(with: .opacity))
                 .accessibilityLabel("Clear filter")
             }
-            if filter == .all || filter == .tv {
-                GlassPill(selected: filter == .tv) { setFilter(filter == .tv ? .all : .tv) } label: { Text("Series") }
+            if filter == .all || filter.type == .tv {
+                GlassPill(selected: filter.type == .tv) { toggleType(.tv) } label: { Text("Series") }
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
-            if filter == .all || filter == .movie {
-                GlassPill(selected: filter == .movie) { setFilter(filter == .movie ? .all : .movie) } label: { Text("Films") }
+            if filter == .all || filter.type == .movie {
+                GlassPill(selected: filter.type == .movie) { toggleType(.movie) } label: { Text("Films") }
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
             GlassPill(selected: selectedCategory != nil) {
@@ -423,12 +443,12 @@ struct HomeView: View {
         case .all: return "Home"
         case .tv: return "Series"
         case .movie: return "Films"
-        case .category(let c): return c.name
+        case .category(let c, _): return c.name
         }
     }
 
     private var selectedCategory: HomeCategory? {
-        if case .category(let c) = filter { return c }
+        if case .category(let c, _) = filter { return c }
         return nil
     }
 
@@ -438,12 +458,23 @@ struct HomeView: View {
     }
 
     private var continueItems: [LibraryItem] {
-        let items = Array(history.prefix(20))
+        let items = Array(history.filter { !$0.isFinishedMovie }.prefix(20))
         switch filter {
         case .all: return items
         case .tv: return items.filter { $0.typeRaw == MediaType.tv.rawValue }
         case .movie: return items.filter { $0.typeRaw == MediaType.movie.rawValue }
         case .category: return []
+        }
+    }
+
+    /// Series or Films on its own, or off again (keeping a picked category).
+    private func toggleType(_ type: MediaType) {
+        if filter.type == type {
+            if let c = selectedCategory { setFilter(.category(c, nil)) } else { setFilter(.all) }
+        } else if let c = selectedCategory {
+            setFilter(.category(c, type))
+        } else {
+            setFilter(type == .tv ? .tv : .movie)
         }
     }
 
@@ -558,6 +589,8 @@ struct HeroCard: View {
 /// Full-screen list of categories over a blur, with a round close button.
 struct CategoriesOverlay: View {
     let selected: HomeCategory?
+    /// Inside Series or Films: only categories that kind has.
+    var type: MediaType?
     let onPick: (HomeCategory?) -> Void
     let onClose: () -> Void
     @State private var shown = false
@@ -567,8 +600,9 @@ struct CategoriesOverlay: View {
             Rectangle().fill(.ultraThinMaterial).overlay(Color.black.opacity(0.6)).ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 4) {
-                    item("Home", on: selected == nil, index: 0) { onPick(nil) }
-                    ForEach(Array(HomeCategory.all.enumerated()), id: \.element.id) { i, c in
+                    item(type == .tv ? "All Series" : type == .movie ? "All Films" : "Home",
+                         on: selected == nil, index: 0) { onPick(nil) }
+                    ForEach(Array(categories.enumerated()), id: \.element.id) { i, c in
                         item(c.name, on: selected == c, index: i + 1) { onPick(c) }
                     }
                 }
@@ -594,6 +628,14 @@ struct CategoriesOverlay: View {
         }
         .onAppear {
             withAnimation(.spring(duration: 0.45, bounce: 0.35).delay(0.08)) { shown = true }
+        }
+    }
+
+    private var categories: [HomeCategory] {
+        switch type {
+        case .tv: return HomeCategory.all.filter { $0.tv != nil }
+        case .movie: return HomeCategory.all.filter { $0.movie != nil }
+        default: return HomeCategory.all
         }
     }
 
