@@ -8,12 +8,20 @@ struct SettingsView: View {
     @AppStorage(Keys.configURL) private var configURL = ""
     @AppStorage(Keys.autoplayNext) private var autoplayNext = true
     @AppStorage(Keys.nativeFullscreen) private var nativeFullscreen = false
+    @AppStorage(Keys.profileName) private var profileName = "You"
+    @Environment(\.dismiss) private var dismiss
     @State private var visit: SiteVisit?
     @State private var confirmClear = false
+    @State private var confirmForget = false
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Profile") {
+                    TextField("Profile name", text: $profileName)
+                        .textInputAutocapitalization(.words)
+                }
+
                 Section {
                     LabeledContent("Address", value: site.domain)
                     HStack {
@@ -65,7 +73,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Playback")
                 } footer: {
-                    Text("Autoplay: near the end of an episode, a 10-second countdown starts the next one on the same player.\n\nFullscreen: off keeps the site's player and its controls (captions, quality) in fullscreen. On uses the iPhone's own player, which has picture-in-picture but can show subtitles twice. Applies the next time you open a video.")
+                    Text("Autoplay: near the end of an episode, a 10-second countdown starts the next one on the same player.\n\nFullscreen: off uses Flix's own controls over the site's video. On uses the iPhone's own player, which has picture-in-picture but can show subtitles twice. Applies the next time you open a video.")
                 }
 
                 Section("Advanced") {
@@ -73,7 +81,7 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Button("Forget remembered links") { forgetLinks() }
+                    Button("Forget remembered links", role: .destructive) { confirmForget = true }
                     Button("Clear watch history", role: .destructive) { confirmClear = true }
                 }
 
@@ -82,9 +90,21 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }.fontWeight(.semibold)
+                }
+            }
             .confirmationDialog("Clear watch history and resume points?", isPresented: $confirmClear,
                                 titleVisibility: .visible) {
                 Button("Clear", role: .destructive) { clearHistory() }
+            }
+            .confirmationDialog("Forget the site page saved for every title?", isPresented: $confirmForget,
+                                titleVisibility: .visible) {
+                Button("Forget Links", role: .destructive) { forgetLinks() }
+            } message: {
+                Text("Play will open each title from domain.json's link again.")
             }
             .playerCover($visit)
         }

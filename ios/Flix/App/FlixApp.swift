@@ -6,6 +6,8 @@ import SwiftUI
 struct FlixApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var site = SiteService()
+    @StateObject private var ratings = RatingStore()
+    @StateObject private var router = Router()
 
     init() {
         // Bigger image cache so poster rows don't re-download on every scroll.
@@ -18,6 +20,8 @@ struct FlixApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(site)
+                .environmentObject(ratings)
+                .environmentObject(router)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 .task {
@@ -66,8 +70,36 @@ enum Orientation {
 }
 
 enum Theme {
-    static let accent = Color(red: 0.898, green: 0.282, blue: 0.302)
-    static let card = Color(white: 0.11)
+    /// Netflix-style red, for progress bars, badges and the logo.
+    static let accent = Color(red: 0.898, green: 0.035, blue: 0.078)
+    /// Title page and panel background.
+    static let card = Color(white: 0.094)
+    /// Buttons and pills on dark backgrounds.
+    static let raised = Color(white: 0.17)
+    /// Age-rating badge.
+    static let ratingBadge = Color(red: 0.898, green: 0.314, blue: 0.102)
+}
+
+/// Opens title pages and the player from anywhere (rows, Search, My Flix).
+@MainActor
+final class Router: ObservableObject {
+    struct DetailRoute: Identifiable {
+        let id = UUID()
+        let title: Title
+        /// The tapped poster, so iOS 18 can zoom the page out of it.
+        let sourceID: String
+    }
+
+    @Published var detail: DetailRoute?
+    @Published var visit: SiteVisit?
+
+    func open(_ title: Title, from sourceID: String) {
+        detail = DetailRoute(title: title, sourceID: sourceID)
+    }
+
+    func play(_ request: PlayRequest) {
+        visit = SiteVisit(request: request)
+    }
 }
 
 enum Keys {
@@ -75,8 +107,18 @@ enum Keys {
     static let configURL = "configURL"
     static let autoplayNext = "autoplayNext"
     static let nativeFullscreen = "nativeFullscreen"
+    static let profileName = "profileName"
     static let defaultConfigURL = "https://chiennugget.github.io/flix-launcher/domain.json"
     static let rawConfigURL = "https://raw.githubusercontent.com/chiennugget/flix-launcher/main/domain.json"
+}
+
+enum Profile {
+    /// The profile name to show: "You" when Settings' field is blank, so
+    /// Home never reads "Continue Watching for ".
+    static func name(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "You" : trimmed
+    }
 }
 
 enum Format {
