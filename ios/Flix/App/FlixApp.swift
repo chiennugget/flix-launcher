@@ -112,6 +112,15 @@ enum Keys {
     static let rawConfigURL = "https://raw.githubusercontent.com/chiennugget/flix-launcher/main/domain.json"
 }
 
+enum Profile {
+    /// The profile name to show: "You" when Settings' field is blank, so
+    /// Home never reads "Continue Watching for ".
+    static func name(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "You" : trimmed
+    }
+}
+
 enum Format {
     static func time(_ seconds: Double) -> String {
         let s = max(0, Int(seconds))

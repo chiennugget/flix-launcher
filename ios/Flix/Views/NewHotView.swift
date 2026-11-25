@@ -9,41 +9,50 @@ final class NewHotModel: ObservableObject {
     @Published private(set) var topMovies: [Title] = []
     @Published private(set) var loading = false
     @Published private(set) var failed = false
+    /// Why nothing loaded (a rejected key, offline…), shown with Retry.
+    @Published private(set) var errorText: String?
     private var loadedKey: String?
 
     func load(key: String, force: Bool = false) async {
         guard let client = TMDB.client(userKey: key), force || loadedKey != key else { return }
         failed = false
+        errorText = nil
         loading = true
         defer { loading = false }
         let today = HomeModel.today
-        async let movies = try? client.titles("/movie/upcoming", ["region": "US"], type: .movie)
-        async let shows = try? client.titles("/discover/tv", ["first_air_date.gte": today,
-                                                               "sort_by": "popularity.desc",
-                                                               "with_original_language": "en"], type: .tv)
-        async let trending = try? client.titles("/trending/all/day")
-        async let tv = try? client.titles("/trending/tv/day", type: .tv)
-        async let mv = try? client.titles("/trending/movie/day", type: .movie)
+        async let movies = Self.fetch(client, "/movie/upcoming", ["region": "US"], type: .movie)
+        async let shows = Self.fetch(client, "/discover/tv", ["first_air_date.gte": today,
+                                                             "sort_by": "popularity.desc",
+                                                             "with_original_language": "en"], type: .tv)
+        async let trending = Self.fetch(client, "/trending/all/day")
+        async let tv = Self.fetch(client, "/trending/tv/day", type: .tv)
+        async let mv = Self.fetch(client, "/trending/movie/day", type: .movie)
+        let results = [await movies, await shows, await trending, await tv, await mv]
 
-        let upcoming = ((await movies ?? []) + (await shows ?? []))
+        let upcoming = (results[0].titles + results[1].titles)
             .filter { ($0.date ?? "") > today && $0.backdropPath != nil }
             .sorted { ($0.date ?? "") < ($1.date ?? "") }
         withAnimation(.easeOut(duration: 0.3)) {
             soon = Array(upcoming.prefix(16))
-        }
-        let t = await trending ?? []
-        let s = await tv ?? []
-        let m = await mv ?? []
-        withAnimation(.easeOut(duration: 0.3)) {
-            watching = Array(t.filter { $0.backdropPath != nil }.prefix(8))
-            topShows = Array(s.filter { $0.backdropPath != nil }.prefix(10))
-            topMovies = Array(m.filter { $0.backdropPath != nil }.prefix(10))
+            watching = Array(results[2].titles.filter { $0.backdropPath != nil }.prefix(8))
+            topShows = Array(results[3].titles.filter { $0.backdropPath != nil }.prefix(10))
+            topMovies = Array(results[4].titles.filter { $0.backdropPath != nil }.prefix(10))
         }
         // Only count it as loaded if something came back, so a launch while
         // offline doesn't leave the tab empty for good.
         let empty = soon.isEmpty && watching.isEmpty && topShows.isEmpty && topMovies.isEmpty
         loadedKey = empty ? nil : key
         failed = empty
+        errorText = empty ? results.compactMap(\.error).first?.localizedDescription : nil
+    }
+
+    private static func fetch(_ client: TMDBClient, _ path: String, _ query: [String: String] = [:],
+                              type: MediaType? = nil) async -> (titles: [Title], error: Error?) {
+        do {
+            return (try await client.titles(path, query, type: type), nil)
+        } catch {
+            return ([], error)
+        }
     }
 }
 
@@ -98,8 +107,10 @@ struct NewHotView: View {
                         } else if model.failed {
                             VStack(spacing: 10) {
                                 Text("Couldn't load New & Hot.").font(.system(size: 17, weight: .bold))
-                                Text("Check your connection and try again.")
+                                Text(model.errorText ?? "Check your connection and try again.")
                                     .font(.subheadline).foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 32)
                                 Button("Retry") { Task { await model.load(key: tmdbKey, force: true) } }
                                     .buttonStyle(.bordered)
                             }
@@ -114,7 +125,9 @@ struct NewHotView: View {
                 .refreshable { await model.load(key: tmdbKey, force: true) }
                 .onPreferenceChange(SectionTopsKey.self) { tops in
                     guard !jumping else { return }
-                    let current = Section.allCases.last { (tops[$0.rawValue] ?? .infinity) <= 110 } ?? .soon
+                    let current = Section.allCases.last {
+                        !isEmpty($0) && (tops[$0.rawValue] ?? .infinity) <= 110
+                    } ?? .soon
                     if current != active { withAnimation(.easeOut(duration: 0.2)) { active = current } }
                 }
                 header(proxy)
@@ -179,11 +192,21 @@ struct NewHotView: View {
         .overlay(Capsule().stroke(.white.opacity(on ? 0 : 0.2), lineWidth: 1))
     }
 
+    /// A section with nothing loaded hides its heading (e.g. while showing an error).
+    private func isEmpty(_ s: Section) -> Bool {
+        switch s {
+        case .soon: return model.soon.isEmpty
+        case .watching: return model.watching.isEmpty
+        case .shows: return model.topShows.isEmpty
+        case .movies: return model.topMovies.isEmpty
+        }
+    }
+
     @ViewBuilder
     private func sectionView<Content: View>(_ s: Section, heading: String? = nil, icon: String? = nil, top10: Bool = false,
                                             @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let heading {
+            if let heading, !isEmpty(s) {
                 HStack(spacing: 8) {
                     if let icon { Image(systemName: icon).foregroundStyle(.orange) }
                     if top10 { Top10Badge(scale: 1.05) }

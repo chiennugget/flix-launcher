@@ -335,7 +335,7 @@ struct TitleDetailView: View {
                 }
                 .padding(.vertical, 8)
             }
-            if loadingEpisodes && episodes.isEmpty {
+            if loadingEpisodes && (episodes.isEmpty || episodesStale) {
                 ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
             } else if episodesFailed {
                 HStack {
@@ -345,6 +345,21 @@ struct TitleDetailView: View {
                 .font(.subheadline)
                 .padding(.vertical, 12)
             }
+            episodeList
+                // The previous season stays (dimmed, not tappable) until the
+                // new one arrives, so the page keeps its height and scroll spot.
+                .opacity(episodesStale ? 0.3 : 1)
+                .allowsHitTesting(!episodesStale)
+                .accessibilityHidden(episodesStale)
+        }
+        .animation(.easeOut(duration: 0.25), value: episodes)
+    }
+
+    /// `episodes` still holds another season's list while a new one loads.
+    private var episodesStale: Bool { episodesSeason != nil && episodesSeason != season }
+
+    private var episodeList: some View {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(episodes) { ep in
                 let request = PlayRequest(title: shown, season: ep.seasonNumber, episode: ep.episodeNumber)
                 EpisodeRow(episode: ep, progress: progressByKey[request.progressKey]) {
@@ -366,7 +381,6 @@ struct TitleDetailView: View {
                 }
             }
         }
-        .animation(.easeOut(duration: 0.25), value: episodes)
     }
 
     private func seasonName(_ s: SeasonSummary) -> String {
@@ -412,7 +426,7 @@ struct TitleDetailView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(.white)
         }
-        .disabled(episodes.isEmpty)
+        .disabled(episodes.isEmpty || episodesStale)
         .accessibilityLabel("Season options")
     }
 
@@ -551,6 +565,8 @@ struct TitleDetailView: View {
             if let item, let detail { item.update(from: detail) }
         } catch is CancellationError {
             return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
             detailError = error.localizedDescription
         }
@@ -567,10 +583,11 @@ struct TitleDetailView: View {
     private func loadSeason() async {
         guard title.type == .tv, !seasons.isEmpty, let client = TMDB.client(userKey: tmdbKey) else { return }
         let number = season
-        if episodesSeason != number { episodes = [] }
         loadingEpisodes = true
         episodesFailed = false
-        defer { loadingEpisodes = false }
+        // A cancelled load for a season no longer picked mustn't hide the
+        // spinner of the one that replaced it.
+        defer { if season == number { loadingEpisodes = false } }
         do {
             let loaded = try await client.season(title.tmdbID, number).episodes
             // A slower load for a season no longer picked mustn't win.
@@ -579,8 +596,15 @@ struct TitleDetailView: View {
                 episodesSeason = number
             }
         } catch is CancellationError {
+        } catch let error as URLError where error.code == .cancelled {
         } catch {
-            if season == number, episodes.isEmpty { episodesFailed = true }
+            guard season == number else { return }
+            if episodesSeason != number {
+                // Don't leave another season's list under this one's name.
+                episodes = []
+                episodesSeason = nil
+            }
+            if episodes.isEmpty { episodesFailed = true }
         }
     }
 }

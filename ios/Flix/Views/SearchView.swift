@@ -10,29 +10,30 @@ struct SearchView: View {
     @State private var recommended: [Title] = []
     @State private var searched = false
     @State private var error: String?
+    /// Why the recommendations didn't load, shown with Retry instead of a blank tab.
+    @State private var recommendedError: String?
     @FocusState private var focused: Bool
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Color.black.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 62)
-                    if TMDB.client(userKey: tmdbKey) == nil {
-                        KeyMissingCard().padding(.top, 12)
-                    }
-                    if trimmed.isEmpty {
-                        recommendedList
-                    } else {
-                        resultsView
-                    }
-                    Color.clear.frame(height: 110)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if TMDB.client(userKey: tmdbKey) == nil {
+                    KeyMissingCard().padding(.top, 12)
                 }
+                if trimmed.isEmpty {
+                    recommendedList
+                } else {
+                    resultsView
+                }
+                Color.clear.frame(height: 110)
             }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.immediately)
-            searchBar
         }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        // Pinned under the status bar by the safe area, so the keyboard
+        // can't slide it up under the clock or down the screen.
+        .safeAreaInset(edge: .top, spacing: 0) { searchBar }
+        .background(Color.black.ignoresSafeArea())
         .task(id: query) { await search() }
         .task(id: tmdbKey) { await loadRecommended() }
     }
@@ -82,6 +83,20 @@ struct SearchView: View {
 
     @ViewBuilder
     private var recommendedList: some View {
+        if recommended.isEmpty, let recommendedError {
+            VStack(spacing: 10) {
+                Text("Couldn't load recommendations.").font(.system(size: 17, weight: .bold))
+                Text(recommendedError)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Retry") { Task { await loadRecommended() } }
+                    .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.top, 70)
+        }
         if !recommended.isEmpty {
             Text("Recommended TV Shows & Movies")
                 .font(.system(size: 19, weight: .heavy))
@@ -167,11 +182,27 @@ struct SearchView: View {
 
     private func loadRecommended() async {
         guard recommended.isEmpty, let client = TMDB.client(userKey: tmdbKey) else { return }
-        var list = (try? await client.titles("/trending/all/week")) ?? []
-        // One retry: this runs at first launch, often before the network is up.
-        if list.isEmpty, !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(3))
-            list = (try? await client.titles("/trending/all/week")) ?? []
+        recommendedError = nil
+        var list: [Title] = []
+        var failure: Error?
+        // Two tries: this runs at first launch, often before the network is up.
+        for attempt in 0..<2 {
+            if attempt > 0 {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+            }
+            do {
+                list = try await client.titles("/trending/all/week")
+                failure = nil
+                break
+            } catch {
+                failure = error
+            }
+        }
+        if let failure {
+            if (failure as? URLError)?.code == .cancelled || failure is CancellationError { return }
+            recommendedError = failure.localizedDescription
+            return
         }
         withAnimation(.easeOut(duration: 0.3)) { recommended = Array(list.prefix(16)) }
     }

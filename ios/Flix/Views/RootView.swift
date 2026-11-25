@@ -40,6 +40,9 @@ struct RootView: View {
                 withAnimation(.easeInOut(duration: 0.22)) { tab = picked }
             }
             .opacity(launch == .logo ? 0 : 1)
+            // Stays at the bottom behind the keyboard instead of riding up
+            // over Search's results.
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .environment(\.zoomNamespace, zoom)
         .overlay {
@@ -229,14 +232,32 @@ struct TopReveal: Shape {
     }
 }
 
+/// Title pages and My Flix hide the navigation bar, which also turns off
+/// UIKit's swipe-back. This turns it back on for pushed pages.
+extension UINavigationController: UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === interactivePopGestureRecognizer else { return true }
+        return viewControllers.count > 1 && transitionCoordinator == nil
+    }
+}
+
 /// A title page with its own navigation, so "More Like This" can push more pages.
 struct DetailContainer: View {
     let route: Router.DetailRoute
+    @State private var path: [Title] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             TitleDetailView(title: route.title, isRoot: true)
                 .navigationDestination(for: Title.self) { TitleDetailView(title: $0, isRoot: false) }
         }
+        // The zoom transition's swipe-to-dismiss would otherwise beat the
+        // back swipe on pushed pages and close the whole stack.
+        .interactiveDismissDisabled(!path.isEmpty)
     }
 }

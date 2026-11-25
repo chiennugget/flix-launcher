@@ -72,6 +72,7 @@ struct PlayerScreen: View {
     @State private var originalBrightness: CGFloat?
     @State private var backBounce = 0
     @State private var forwardBounce = 0
+    @State private var lastSave = Date.distantPast
 
     init(visit: SiteVisit, onClose: @escaping () -> Void) {
         self.visit = visit
@@ -112,6 +113,8 @@ struct PlayerScreen: View {
             withAnimation(.spring(duration: 0.4, bounce: 0)) { appeared = true }
         }
         .onChange(of: landscape || fullscreen, initial: true) { showControls() }
+        // The site's own control bar hides while Flix's controls are on.
+        .onChange(of: flixControls, initial: true) { web.setSiteControlsHidden(flixControls) }
         .onChange(of: scrubbing == nil) {
             if scrubbing != nil { hideControlsTask?.cancel() }
         }
@@ -122,6 +125,7 @@ struct PlayerScreen: View {
             loadingLimitTask?.cancel()
             revealTask?.cancel()
             lockHintTask?.cancel()
+            saveNow()
             web.teardown()
             if let originalBrightness { Self.screen?.brightness = originalBrightness }
             Orientation.allow(.portrait)
@@ -174,20 +178,24 @@ struct PlayerScreen: View {
 
     private var loadingCover: some View {
         ZStack {
+            // The artwork is an overlay so its fill size never sizes the cover.
+            // (Inside the ZStack it made the cover taller than a landscape
+            // screen, pushing the close button half off the top.)
             Color.black
-            if let path = current?.title.backdropPath ?? current?.title.posterPath {
-                AsyncImage(url: TMDB.image(path, size: "w1280")) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        Color.black
+                .overlay {
+                    if let path = current?.title.backdropPath ?? current?.title.posterPath {
+                        AsyncImage(url: TMDB.image(path, size: "w1280")) { phase in
+                            if let image = phase.image {
+                                image.resizable().scaledToFill()
+                            } else {
+                                Color.black
+                            }
+                        }
+                        .blur(radius: 24)
+                        .opacity(0.45)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
-                .blur(radius: 24)
-                .opacity(0.45)
-            }
             LinearGradient(colors: [.black.opacity(0.2), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
             VStack(spacing: 8) {
                 if let current {
@@ -280,9 +288,11 @@ struct PlayerScreen: View {
 
     private var controlsLayer: some View {
         ZStack {
+            // A light dim through the middle keeps the white play/skip
+            // buttons readable over bright scenes.
             LinearGradient(stops: [.init(color: .black.opacity(0.65), location: 0),
-                                   .init(color: .clear, location: 0.28),
-                                   .init(color: .clear, location: 0.6),
+                                   .init(color: .black.opacity(0.3), location: 0.28),
+                                   .init(color: .black.opacity(0.3), location: 0.6),
                                    .init(color: .black.opacity(0.75), location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
@@ -839,7 +849,12 @@ struct PlayerScreen: View {
     private func fallbackBanner(_ next: Int) -> some View {
         HStack(spacing: 12) {
             Text("Not playing?").font(.footnote.weight(.semibold))
-            Button("Try Player \(next)") { switchPlayer(to: next) }
+            Button {
+                switchPlayer(to: next)
+            } label: {
+                // Fixed size: the bordered style otherwise truncated it to "Try Play…".
+                Text("Try Player \(next)").fixedSize()
+            }
                 .font(.footnote.weight(.bold))
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
@@ -1125,6 +1140,14 @@ struct PlayerScreen: View {
             progress.sitePath = path
         }
         Library.markWatched(request, progress: progress, in: context)
+        // SwiftData only autosaves on its own schedule (or when the app goes to
+        // the background), so a crash or a kill mid-film lost the resume point.
+        if event.kind != "progress" || Date.now.timeIntervalSince(lastSave) > 30 { saveNow() }
+    }
+
+    private func saveNow() {
+        lastSave = .now
+        try? context.save()
     }
 
     /// Tracks the site's own player buttons and in-site episode changes.

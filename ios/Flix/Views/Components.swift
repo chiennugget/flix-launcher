@@ -518,7 +518,26 @@ struct ScrollOffsetKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-/// Put first in a ScrollView's content; reports how far it has scrolled.
+extension View {
+    /// Reports how far a ScrollView has scrolled (0 at rest). iOS 18+ reads
+    /// the scroll geometry directly: newer iOS versions no longer pass the
+    /// ScrollOffsetReader preference out of the scroll view, so the value
+    /// stayed 0 and the header never got its background. iOS 17 uses the reader.
+    @ViewBuilder
+    func onScrollOffsetChange(_ action: @escaping (CGFloat) -> Void) -> some View {
+        if #available(iOS 18.0, *) {
+            onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y + geo.contentInsets.top
+            } action: { _, y in
+                action(y)
+            }
+        } else {
+            onPreferenceChange(ScrollOffsetKey.self, perform: action)
+        }
+    }
+}
+
+/// Put first in a ScrollView's content; reports how far it has scrolled (iOS 17).
 struct ScrollOffsetReader: View {
     let space: String
 

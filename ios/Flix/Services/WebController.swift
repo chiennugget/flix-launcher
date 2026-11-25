@@ -76,6 +76,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
 
     /// Shrinks the page to just its video player.
     private(set) var playerOnly = false
+    /// Hides the site player's own control bar inside its frames while Flix's
+    /// controls are on, so the two sets don't sit on top of each other.
+    private(set) var siteControlsHidden = false
+    /// The page's other scripts, kept so the hide flag's script can be swapped.
+    private var baseScripts: [WKUserScript] = []
 
     private(set) weak var webView: WKWebView?
     var isAllowed: (URL) -> Bool = { _ in true }
@@ -108,15 +113,15 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         config.preferences.isElementFullscreenEnabled = true
 
         let content = config.userContentController
-        content.addUserScript(WKUserScript(source: Scripts.video, injectionTime: .atDocumentEnd,
-                                           forMainFrameOnly: false))
-        // Before the page's own scripts, so players pick up the replaced fullscreen calls.
-        content.addUserScript(WKUserScript(
-            source: "window.__flixNativeFullscreen = \(nativeFullscreen);\n" + Scripts.fullscreen,
-            injectionTime: .atDocumentStart, forMainFrameOnly: false))
         let focusSetup = "window.__flixFocusDefault = \(playerOnly); window.__flixPlayerParam = '\(playerParam)';\n"
-        content.addUserScript(WKUserScript(source: focusSetup + Scripts.focus, injectionTime: .atDocumentEnd,
-                                           forMainFrameOnly: true))
+        baseScripts = [
+            WKUserScript(source: Scripts.video, injectionTime: .atDocumentEnd, forMainFrameOnly: false),
+            // Before the page's own scripts, so players pick up the replaced fullscreen calls.
+            WKUserScript(source: "window.__flixNativeFullscreen = \(nativeFullscreen);\n" + Scripts.fullscreen,
+                         injectionTime: .atDocumentStart, forMainFrameOnly: false),
+            WKUserScript(source: focusSetup + Scripts.focus, injectionTime: .atDocumentEnd, forMainFrameOnly: true),
+        ]
+        installScripts(in: content)
         content.add(WeakScriptHandler(self), name: "flix")
         content.add(WeakScriptHandler(self), name: "flixPage")
         if let rules { content.add(rules) }
@@ -170,6 +175,24 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
     func load(_ url: URL) {
         detectedPlayers = 0
         webView?.load(URLRequest(url: url))
+    }
+
+    /// Hides (true) or shows the site player's own controls, now in every
+    /// frame and in frames that load later.
+    func setSiteControlsHidden(_ hidden: Bool) {
+        guard hidden != siteControlsHidden else { return }
+        siteControlsHidden = hidden
+        if let content = webView?.configuration.userContentController { installScripts(in: content) }
+        webView?.evaluateJavaScript("window.__flixHideControls && window.__flixHideControls(\(hidden))",
+                                    in: nil, in: .page, completionHandler: nil)
+    }
+
+    /// The hide flag goes first, so each frame's video script reads it on load.
+    private func installScripts(in content: WKUserContentController) {
+        content.removeAllUserScripts()
+        content.addUserScript(WKUserScript(source: "window.__flixHideSiteControls = \(siteControlsHidden);",
+                                           injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        baseScripts.forEach(content.addUserScript)
     }
 
     func setPlayerOnly(_ on: Bool) {
@@ -463,6 +486,47 @@ enum Scripts {
         }
         setTimeout(poke, 1500);
       }
+      // While Flix's own controls are on, hide the site player's control bar,
+      // title, big play button and menus (captions and error messages stay).
+      // Hidden by visibility, not display, so poke() can still press play.
+      var hideCSS = [
+        '.jw-controls', '.jw-controlbar', '.jw-title', '.jw-center', '.jw-bigplay', '.jw-display',
+        '.jw-gradient', '.jw-upnext', '.jw-menu', '.jw-settings-menu', '.jw-nextup-container',
+        '.vjs-control-bar', '.vjs-big-play-button', '.vjs-title-bar', '.vjs-menu',
+        '.plyr__controls', '.plyr__control--overlaid', '.plyr__menu',
+        '.media-control', '.dplayer-controller', '.dplayer-controller-mask', '.dplayer-bar-wrap',
+        '.art-bottom', '.art-layer-top', '.mejs__controls', '.fluid_controls_container',
+        // The embed wrapper's own title bar ("Show · S01 E01") over the player.
+        '#vs-bar', '#vs-title'
+      ].join(',') + ' { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }' +
+        ' video::-webkit-media-controls, video::-webkit-media-controls-start-playback-button' +
+        ' { display: none !important; }';
+      function applyHide(on) {
+        var style = document.getElementById('flix-hide-controls');
+        if (on && !style) {
+          style = document.createElement('style');
+          style.id = 'flix-hide-controls';
+          style.textContent = hideCSS;
+          (document.head || document.documentElement).appendChild(style);
+        } else if (!on && style) {
+          style.remove();
+        }
+      }
+      // Frames are on other sites, so the setting travels down by postMessage.
+      window.__flixHideControls = function (on) {
+        window.__flixHideSiteControls = on;
+        applyHide(on);
+        for (var i = 0; i < window.frames.length; i++) {
+          try { window.frames[i].postMessage({ __flixControls: on ? 'hide' : 'show' }, '*'); } catch (e) {}
+        }
+      };
+      window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && (d.__flixControls === 'hide' || d.__flixControls === 'show')) {
+          window.__flixHideControls(d.__flixControls === 'hide');
+        }
+      });
+      if (window.__flixHideSiteControls === true) applyHide(true);
       scan();
       new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
       setTimeout(poke, 1200);

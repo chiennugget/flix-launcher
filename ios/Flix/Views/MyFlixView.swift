@@ -75,7 +75,10 @@ struct MyFlixView: View {
     private var profile: some View {
         VStack(spacing: 10) {
             AvatarView().frame(width: 74, height: 74)
-            Text(profileName).font(.system(size: 21, weight: .heavy))
+            Text(Profile.name(profileName))
+                .font(.system(size: 21, weight: .heavy))
+                .lineLimit(1)
+                .padding(.horizontal, 16)
         }
         .frame(maxWidth: .infinity)
     }

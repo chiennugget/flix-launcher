@@ -30,6 +30,7 @@ struct PlayerSheet<Content: View>: View {
                     .overlay(alignment: .topTrailing) {
                         Button(action: onClose) {
                             Image(systemName: "xmark").font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
                                 .frame(width: 44, height: 44)
                         }
                         .padding(.trailing, 12)
@@ -239,7 +240,9 @@ struct EpisodesPanel: View {
                     }
                     Spacer()
                     Button(action: onClose) {
-                        Image(systemName: "xmark").font(.system(size: 18, weight: .semibold)).frame(width: 44, height: 44)
+                        Image(systemName: "xmark").font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Close")
                 }

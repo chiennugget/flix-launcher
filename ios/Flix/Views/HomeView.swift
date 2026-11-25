@@ -133,10 +133,10 @@ final class HomeModel: ObservableObject {
         }
         let id = "\(key)|\(filter)"
         if !force, loadedID == id, !rows.isEmpty { return }
-        if loadedID != id {
-            rows = []
-            hero = nil
-        }
+        // Switching filters keeps the current page on screen until the new
+        // one's first row arrives, then swaps in one step. Emptying it first
+        // made the page blank out and jump while the requests ran.
+        var swapped = loadedID == id
         loadedID = id
         error = nil
         loading = true
@@ -162,10 +162,15 @@ final class HomeModel: ObservableObject {
                 if let row, !row.items.isEmpty {
                     loaded.append((index, row))
                     loaded.sort { $0.0 < $1.0 }
-                    withAnimation(.easeOut(duration: 0.35)) { rows = loaded.map(\.1) }
-                    if hero == nil, index == 0 {
-                        pickHero()
+                    // Wait for the first row (it picks the hero) before
+                    // replacing the old page; later rows then fill in.
+                    guard swapped || loaded.first?.0 == 0 else { continue }
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        if !swapped { hero = nil }
+                        rows = loaded.map(\.1)
+                        if hero == nil { pickHero(animated: false) }
                     }
+                    swapped = true
                 } else if failure == nil {
                     failure = err
                 }
@@ -173,6 +178,14 @@ final class HomeModel: ObservableObject {
         }
         let newRanks = await rankLoad
         guard loadedID == id else { return }
+        if !swapped {
+            // The first row failed: show whatever did load (or nothing).
+            withAnimation(.easeOut(duration: 0.3)) {
+                hero = nil
+                rows = loaded.map(\.1)
+                pickHero(animated: false)
+            }
+        }
         if !newRanks.isEmpty {
             ranks = newRanks
             Self.todayRanks = newRanks
@@ -184,10 +197,14 @@ final class HomeModel: ObservableObject {
         }
     }
 
-    private func pickHero() {
+    private func pickHero(animated: Bool = true) {
         let candidate = rows.first?.items.first { $0.posterPath != nil && $0.backdropPath != nil }
         guard let candidate else { return }
-        withAnimation(.easeOut(duration: 0.4)) { hero = candidate }
+        if animated {
+            withAnimation(.easeOut(duration: 0.4)) { hero = candidate }
+        } else {
+            hero = candidate
+        }
     }
 
     private static func loadRanks(_ client: TMDBClient) async -> [String: Int] {
@@ -228,21 +245,31 @@ struct HomeView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            // The tint is a background so its fixed 680 pt height never sizes
+            // the page. As a ZStack child it made Home taller than the screen
+            // whenever the keyboard was up, which pushed every tab (Search's
+            // field included) up under the clock.
             Color.black.ignoresSafeArea()
-            tintLayer
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ScrollOffsetReader(space: space)
-                    Color.clear.frame(height: 100)
-                    content
+                .overlay(alignment: .top) { tintLayer }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ScrollOffsetReader(space: space)
+                            .id("homeTop")
+                        Color.clear.frame(height: 100)
+                        content
+                    }
                 }
-            }
-            .coordinateSpace(name: space)
-            .scrollIndicators(.hidden)
-            .onPreferenceChange(ScrollOffsetKey.self) { scrolled(to: $0) }
-            .refreshable {
-                await model.load(key: tmdbKey, filter: filter, force: true)
-                await site.refresh()
+                .coordinateSpace(name: space)
+                .scrollIndicators(.hidden)
+                .onScrollOffsetChange { scrolled(to: $0) }
+                .refreshable {
+                    await model.load(key: tmdbKey, filter: filter, force: true)
+                    await site.refresh()
+                }
+                .onChange(of: filter) {
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo("homeTop", anchor: .top) }
+                }
             }
             header
         }
@@ -367,7 +394,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 24) {
             let resume = continueItems
             if !resume.isEmpty {
-                ContinueRow(items: resume, name: "Continue Watching for \(profileName)")
+                ContinueRow(items: resume, name: "Continue Watching for \(Profile.name(profileName))")
             }
             if filter == .all, !watchlist.isEmpty {
                 TitleRow(id: "mylist", name: "My List", titles: watchlist.prefix(20).map(\.asTitle), ranks: model.ranks)
@@ -466,7 +493,7 @@ struct HeroCard: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            artwork
+            poster
             LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 190)
                 .allowsHitTesting(false)
@@ -500,17 +527,17 @@ struct HeroCard: View {
         .padding(.horizontal, 22)
     }
 
-    /// The poster opens the title page; a button for VoiceOver too.
-    private var artwork: some View {
-        Color.clear
+    private var poster: some View {
+        let art: some View = Color.clear
             .overlay { PosterImage(path: title.posterPath, name: title.name, size: "w780") }
             .clipped()
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
+        return art
             .accessibilityElement()
-            .accessibilityLabel(title.name)
+            .accessibilityLabel(Text(title.name))
             .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Opens the title page")
+            .accessibilityHint(Text("Opens the title page"))
             .accessibilityAction { onOpen() }
     }
 
