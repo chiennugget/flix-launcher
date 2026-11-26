@@ -6,6 +6,8 @@ It isn't on the App Store. You install it yourself with **SideStore**, which tak
 
 **Contents:** [What you need](#what-you-need) · [1. Install SideStore](#part-1--install-sidestore-one-time-15-min-needs-a-computer-once) · [2. Install Flix](#part-2--install-flix-2-min-on-your-iphone) · [3. Movie-info key](#part-3--add-a-free-movie-info-key-3-min) · [Keep it working](#keeping-it-working) · [If Flix expired or won't refresh](#if-flix-expired-or-wont-refresh) · [Using the app](#using-the-app) · [Troubleshooting](#troubleshooting)
 
+Running this repo? See the [owner notes](docs/owner.md).
+
 ---
 
 ## What you need
@@ -22,7 +24,6 @@ You don't need a GitHub account. Everything below is free.
 | **SideStore source (what you paste into SideStore)** | `https://github.com/chiennugget/flix-launcher/releases/latest/download/apps.json` |
 | Newest Flix release | [github.com/chiennugget/flix-launcher/releases/latest](https://github.com/chiennugget/flix-launcher/releases/latest) |
 | This repo | `https://github.com/chiennugget/flix-launcher` |
-| Current site address file | `https://chiennugget.github.io/flix-launcher/domain.json` |
 
 ---
 
@@ -75,11 +76,9 @@ Posters, descriptions, episode lists and search come from The Movie Database (TM
 1. Sign up at [themoviedb.org](https://www.themoviedb.org/signup) and confirm your email.
 2. Click your profile picture → **Settings** → **API** → **Create** → **Developer**, accept the terms and fill in the short form. For the app type, choose personal use, and any short description works ("personal movie list app").
 3. Copy the **API Key** (the shorter one) or the **API Read Access Token** (the long one). Either one works.
-4. In Flix: **Settings** tab → paste it into **Movie info (TMDB)**. The home screen fills with rows.
+4. In Flix: **My Flix** tab → **☰** (top right) → paste it into **Movie info (TMDB)**. The home screen fills with rows.
 
 Tip: do steps 1–3 on the phone in Safari, so you can copy and paste straight into Flix.
-
-> Owner only: you could save the key as a repo secret named `TMDB_API_KEY` (**Settings** → **Secrets and variables** → **Actions**) to build it into the app. Because this repo is public, anyone could pull the key out of a release, so typing it into the app is better.
 
 ---
 
@@ -134,72 +133,28 @@ LocalDevVPN 1.3 changed its addresses, and on iOS 27 SideStore can't reach the p
 
 ## Using the app
 
-- **Home:** Continue Watching, My List, Trending, Popular, Top Rated and genre rows. Pull down to refresh.
-- **Title page:** **Play** / **Resume**, **My List**, and for movies **Mark Watched**. Shows get a season menu under **Episodes** and an episode list with progress bars; **long-press an episode** to mark it watched or unwatched, or use **⋯** next to **Episodes** to mark a whole season.
-- **Search** tab: searches TMDB. It also has a *Search on the site* button.
-- **🌐** (top right of Home): opens the site's home page.
-- **In the player:** Play opens the episode with **only the video player** on screen and tries to start it.
-  - **P1 ▾** switches between the site's players (Player 1, 2, 3…). If nothing plays within about 15 seconds, a **Try Player 2** button pops up. The app remembers which player worked for each show and starts there next time.
-  - **✕** closes the player, **‹** goes back, **↻** reloads. In landscape and fullscreen these float over the video and fade out after a few seconds; tap the video to bring them back, or tap again to hide them.
-  - **Episodes** (list icon) opens the show's seasons and episodes over the video; tap one to switch to it on the same player. **⏭** skips to the next episode.
-  - **Up next:** 15 seconds before an episode ends, a 10-second countdown starts the next one on the same player. Tap **Play now** or **✕**. Turn it off in **Settings → Playback**.
-  - The green **shield** counts pop-ups and redirects that were blocked.
-  - **⋯** has **Show full page** (the whole flixbaba page, e.g. to pick episodes there), **Open in Brave**, **Copy link** and **Forget saved page**.
+**Tabs**
+- **Home:** Continue Watching, My List, Top 10 and genre rows. **Series**, **Films** and **Categories** filter the rows. **🌐** (top right) opens the site.
+- **New & Hot:** Coming Soon, Everyone's Watching and the Top 10s.
+- **Search:** searches The Movie Database. It also has a *Search on the site* button.
+- **My Flix:** your list and history. **☰** (top right) opens **Settings**.
 
-**What happens behind the scenes**
+**Title page:** **Play** / **Resume**, **My List**, and **Mark Watched** for movies. Shows have a season menu and an episode list with progress bars. **Long-press an episode** to mark it watched, or use the season's **⋯** to mark a whole season.
 
-- **Address:** checked on every launch. **Settings → Site** shows the address and where it came from. Tap **Check again** to re-run it.
-- **Blocking:** known ad and pop-under networks are blocked. New windows are dropped, and the page can't redirect you off the site.
-- **Resume:** while a video plays, its position is saved every few seconds, and reopening the same movie or episode jumps back to it. This works for most players; if a player hides its video, the app still remembers which episode you were on.
-- **Rotation:** portrait in menus, free rotation while the site is open.
-- **Remembered pages:** the first time a video plays for a title, the app remembers that page, so next time Play goes straight there. If it remembered the wrong page, use **⋯ → Forget saved page**.
+**The player.** Play opens the episode with only the video on screen. Tap the video to show or hide Flix's controls:
+- **✕** closes, **⟲10 / ⟳10** skip, the middle button plays and pauses, and the bar on the left sets brightness.
+- **P1** (top right) switches between the site's players. If nothing plays after about 15 seconds, **Not playing? Try Player 2** appears. The app remembers which player worked for each show.
+- **🔓** locks the screen against accidental taps.
+- Bottom row: **Speed**, **Episodes** (switch episode without leaving), **Audio & Subtitles** and **Next Episode**.
+- **Subtitles:** pick a language under **Audio & Subtitles**. They show under Flix's controls and move up while the controls are visible. If a player has no list there, choose **Use the site's controls** to use the site's own menu; tap **Flix controls** to come back.
+- **Up next:** near the end of an episode, a 10-second countdown starts the next one. Turn it off in **Settings → Playback**.
+- **⋯** has **Show full page**, **Reload**, **Open in Brave**, **Copy link** and **Forget saved page for this**.
 
----
-
-## Make Play open the exact page (owner, optional)
-
-Until this is set, **Play** runs a site search for the title. To go straight to the right page, open any movie and any episode on the site, tap **⋯ → Copy link**, and look at the addresses.
-
-If they contain the TMDB number (the one in a themoviedb.org address, e.g. `themoviedb.org/movie/550` → `550`), edit `paths` in `domain.json` on GitHub (✏️ pencil → **Commit changes**):
-
-```json
-"paths": {
-  "movie": "/movie/{id}",
-  "tv": "/tv/{id}/{season}/{episode}",
-  "search": "/search?q={query}"
-}
-```
-
-Use whatever shape the site actually uses. Placeholders:
-
-| Placeholder | Becomes |
-|---|---|
-| `{id}` | TMDB number, e.g. `155` |
-| `{slug}` | Title in lowercase with dashes, e.g. `the-dark-knight` |
-| `{title}` | Title as written |
-| `{year}` | Release year |
-| `{season}` | Season number |
-| `{episode}` | Episode number |
-| `{query}` | Search text (search link only) |
-| `{player}` | Player number (`p=` on flixbaba) |
-
-Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player": "p"` names the link setting that picks the site's player, and `"players": 5` is how many the player menu offers when the page doesn't list them. The app picks up changes the next time it opens.
-
----
-
-## When the address changes (owner)
-
-**Usually: nothing to do.** The checker runs every 4 hours, and the app also checks the mirrors itself on launch. If you notice the site moved before either catches up, open **Actions** → **Check domain** → **Run workflow**.
-
-**If both miss it** (manual fallback, works from your phone):
-
-1. On GitHub, open `domain.json` → tap the ✏️ pencil.
-2. Change `"domain"` to the new address (e.g. `"flixbaba.newone"`) and `"pinned"` to `true`.
-3. **Commit changes.** In Flix, go to **Settings** → **Check again**.
-
-`"pinned": true` stops the checker from changing it. Set it back to `false` when you want auto-checking again.
-
-**Spotted a new mirror address?** Add it to `"mirrors"` in `domain.json` (the app reads this list) and to `MIRRORS` near the top of `check_domain.py` (the checker reads this one). More old addresses give both more places to find the "moved to" banner.
+**Behind the scenes**
+- **Address:** checked on every launch. **Settings → Site** shows the address; **Check again** re-runs it.
+- **Blocking:** known ad and pop-up networks are blocked, new windows are dropped, and the page can't send you off the site.
+- **Resume:** your position is saved while a video plays, and reopening it jumps back there.
+- **Remembered pages:** the first time a title plays, the app remembers its page, so Play goes straight there next time. If it remembered the wrong one, use **⋯ → Forget saved page for this**.
 
 ---
 
@@ -212,60 +167,12 @@ Leave `movie` or `tv` empty (`""`) to keep using search for that type. `"player"
 | Apple ID sign-in fails in iloader or SideStore | Use the **newest iloader**. See the error table under [If Flix expired or won't refresh](#if-flix-expired-or-wont-refresh). |
 | Home screen is empty with a key message | Add the TMDB key in **Settings** (Part 3). |
 | "TMDB rejected the API key" | Re-copy the key from themoviedb.org. Paste the API Key *or* the Read Access Token, not both. |
-| Play opens a search or 404 page | Pick the right result. It's remembered after the first play. Better: set `paths` (see above). |
-| Play opens the wrong page every time | In the player: **⋯ → Forget saved page**, then play again. |
-| Subtitles show twice, or no captions button in fullscreen | Use the player's own fullscreen button or Flix's ⤢ button; it keeps the site's player and its captions button. Make sure **Settings → Playback → Use iPhone fullscreen player** is off. |
-| Video doesn't start / black screen | Tap **P1 ▾** and try another player. If the screen stays black, use **⋯ → Show full page**. |
+| Play opens a search or 404 page | Pick the right result. It's remembered after the first play. |
+| Play opens the wrong page every time | In the player: **⋯ → Forget saved page for this**, then play again. |
+| Subtitles show twice, or the site's player appears instead of Flix's | Turn off **Settings → Playback → Use iPhone fullscreen player**. |
+| No subtitles in Flix's player | **Audio & Subtitles** → pick a language. If the list is empty, try another player (**P1**) or **Use the site's controls**. |
+| Video doesn't start / black screen | Tap **P1** and try another player. If the screen stays black, use **⋯ → Show full page**. |
 | Doesn't resume where I left off | The player may hide its video from the app; the episode is still remembered. |
-| Site won't load | **Settings → Check again**. If the address is wrong, use the manual fallback above. |
-| Checker always says "No live address found" | The site may block GitHub's servers with a bot check. Use the manual fallback; the checker never overwrites the address when unsure. |
-| GitHub build failed | **Actions** tab → **Build iOS app** → open the red run to see why. |
+| Site won't load | **Settings → Check again**. If the address is still wrong, the owner can set it by hand ([owner notes](docs/owner.md#when-the-address-changes)). |
 
 **Safety:** don't install anything or allow notifications the site asks for, and don't enter personal details on it.
-
----
-
-## Backup: the Brave + Shortcut launcher
-
-This was the setup before the app. It still works and needs no sideloading: one Shortcut icon that unlocks rotation and opens the current address in Brave with ads blocked.
-
-**Brave (2 min).** Install **Brave** from the App Store. Then **⋯** → **Settings** → **Shields & Privacy**: **Trackers & ads blocking** → **Aggressive**, and **Block Pop-ups** → **On**. Leave **Block Scripts** off; it breaks the video player.
-
-**The Shortcut (5 min).** **Shortcuts** → **+**, then add these actions in order:
-
-| # | Action | Set it to |
-|---|---|---|
-| 1 | **Set Orientation Lock** | Tap *Toggle* → change to **Turn**, set to **Off** |
-| 2 | **URL** | `https://chiennugget.github.io/flix-launcher/domain.json` |
-| 3 | **Get Contents of URL** | (leave as is) |
-| 4 | **Get Dictionary Value** | Get **Value** for key `domain` in *Contents of URL* |
-| 5 | **Text** | `brave://open-url?url=https://` then the **Dictionary Value** variable, then `/` |
-| 6 | **Open URLs** | (uses the Text above) |
-
-Rename it **Flix** → **ⓘ** / share → **Add to Home Screen**. Run it once and choose **Always Allow** on the prompts.
-
-**Re-lock rotation (2 min).** **Shortcuts** → **Automation** → **+** → **App** → **Brave** → tick only **Is Closed** → **Run Immediately** → **New Blank Automation** → **Set Orientation Lock** → **Turn** → **On** → **Done**.
-
-**Web app icon (optional).** In Safari, open `https://chiennugget.github.io/flix-launcher/` → **Share** → **Add to Home Screen**. Launched from the Home Screen, it opens Brave at the current address. It can't unlock rotation.
-
-| Problem | Fix |
-|---|---|
-| Shortcut opens Brave to a blank tab | Step 5 must read exactly `brave://open-url?url=https://` + variable + `/`. |
-| "Couldn't connect" on step 3 | GitHub Pages isn't live. **Settings** → **Pages** → Source **Deploy from a branch**, **main**, **/ (root)**. |
-| Screen doesn't rotate | Put the video in **fullscreen**. Step 1 must say **Turn Off**, not Toggle. |
-
----
-
-## What's in this repo
-
-| Path | What it is |
-|---|---|
-| `domain.json` | Current address, mirrors and link templates |
-| `check_domain.py`, `.github/workflows/check-domain.yml` | The checker that updates `domain.json` every 4 hours |
-| `ios/` | The iOS app (SwiftUI). `project.yml` describes the Xcode project |
-| `.github/workflows/build-ios.yml` | Builds `Flix.ipa` and the SideStore source on each change to `ios/` |
-| `index.html`, `manifest.webmanifest`, `icon-*.png` | The backup web launcher (GitHub Pages) |
-
-**First-time GitHub setup (already done for this repo).** For a fresh copy:
-1. Turn on **Settings** → **Pages** → **Deploy from a branch** → **main** / **(root)**.
-2. Set **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write permissions**, so the checker and the app build can save their results.

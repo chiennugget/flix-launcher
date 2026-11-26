@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 import requests
 
-CONFIG = Path(__file__).with_name("domain.json")
+CONFIG = Path(__file__).resolve().parent.parent / "domain.json"
 
 # Old addresses that usually point to the newest one. The saved address is
 # always checked first; add more here if you spot them.

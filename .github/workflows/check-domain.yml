@@ -20,7 +20,7 @@ jobs:
 
       - run: pip install requests
 
-      - run: python check_domain.py
+      - run: python scripts/check_domain.py
 
       - name: Save if the address changed
         run: |
