@@ -385,6 +385,10 @@ enum Scripts {
         var lastTick = 0;
         function report(kind) {
           if (!isFinite(v.duration) || v.duration < 60) return;
+          // Back to where it was before Flix reloaded the player for a subtitle change.
+          var resumeAt = null;
+          try { resumeAt = sessionStorage.getItem('flixResumeAt'); sessionStorage.removeItem('flixResumeAt'); } catch (e) {}
+          if (resumeAt && +resumeAt > 0 && +resumeAt < v.duration - 10) v.currentTime = +resumeAt;
           if (window !== window.top && (!keepEl || !keepEl.isConnected || keepEl.tagName !== 'VIDEO' ||
               keepEl === v || v.duration > keepEl.duration)) {
             if (markKeep(v) || kind === 'ready') announce();
@@ -502,7 +506,8 @@ enum Scripts {
         var tt = v.textTracks || [];
         for (var i = 0; i < tt.length && !site; i++) {
           if (isText(tt[i])) {
-            out.text.push({ i: i, l: tt[i].label || tt[i].language || ('Subtitles ' + (i + 1)), on: tt[i].mode === 'showing' });
+            var loaded = rememberedLanguage && tt[i].cues && tt[i].cues.length > 0;
+            out.text.push({ i: i, l: tt[i].label || tt[i].language || ('Subtitles ' + (i + 1)), on: tt[i].mode === 'showing' || !!loaded });
           }
         }
         var at = v.audioTracks;
@@ -512,6 +517,41 @@ enum Scripts {
           }
         }
         return out;
+      }
+      // vidcore.io on a phone has no subtitle menu in the page until its own
+      // CC button is tapped, and its video tracks stay empty until a language
+      // is picked there. It loads the language saved in its 'language' setting
+      // when it starts, so Flix saves the pick there and reloads the player,
+      // which then loads and draws that language itself.
+      var rememberedLanguage = /(^|\.)vidcore\.io$/.test(location.hostname);
+      var languageCodes = ['en', 'es', 'fr', 'de', 'pt', 'it', 'nl', 'ar', 'zh', 'ja', 'ko', 'ru', 'pl', 'tr', 'sv',
+        'da', 'fi', 'no', 'nb', 'he', 'hi', 'id', 'ms', 'th', 'vi', 'cs', 'el', 'hu', 'ro', 'bg', 'hr', 'sr', 'sk',
+        'sl', 'uk', 'fa', 'bn', 'et', 'is', 'bs', 'sq', 'si', 'lt', 'lv', 'mk', 'ca', 'ta', 'te', 'ur', 'tl'];
+      function codeFor(label) {
+        var name = String(label || '').replace(/\(.*\)/, '').trim().toLowerCase();
+        if (/^[a-z]{2}$/.test(name)) return name;
+        try {
+          var names = new Intl.DisplayNames(['en'], { type: 'language' });
+          for (var i = 0; i < languageCodes.length; i++) {
+            if (names.of(languageCodes[i]).toLowerCase() === name) return languageCodes[i];
+          }
+        } catch (e) {}
+        return null;
+      }
+      function pickRemembered(v, arg) {
+        try {
+          if (arg < 0) {
+            localStorage.removeItem('language');
+          } else {
+            var track = (v.textTracks || [])[arg];
+            var code = track && codeFor(track.label || track.language);
+            if (!code) return false;
+            localStorage.setItem('language', code);
+          }
+          sessionStorage.setItem('flixResumeAt', String(v.currentTime));
+        } catch (e) { return false; }
+        location.reload();
+        return true;
       }
       window.__flixCmd = function (cmd, arg) {
         var v = mainVideo();
@@ -530,6 +570,8 @@ enum Scripts {
           var site = siteSubs();
           var pick = arg < 0 ? site.off : (site.items[arg - 1000] || {}).el;
           if (pick) pick.click();
+        } else if (cmd === 'text' && rememberedLanguage && pickRemembered(v, arg)) {
+          return '';
         } else if (cmd === 'text') {
           var tt = v.textTracks || [];
           for (var k = 0; k < tt.length; k++) { if (isText(tt[k])) tt[k].mode = (k === arg) ? 'showing' : 'disabled'; }
@@ -649,8 +691,10 @@ enum Scripts {
         var r = el.getBoundingClientRect();
         var h = window.innerHeight || 1;
         if (r.height <= 0 || r.height > h * 0.5 || r.top + r.height / 2 < h * 0.4) return;
-        // Counted by class as well, since players often re-create the element per line.
+        // Counted by class as well, since players often re-create the element per line,
+        // but not a class many elements share (a list's rows, say).
         var cls = el.getAttribute('class') || '';
+        if (cls && sameClass(cls).length > 2) cls = '';
         var seen = cls ? capSeenByClass[cls] : capSeen.get(el);
         if (!seen) {
           seen = { last: text, n: 0 };
@@ -663,7 +707,52 @@ enum Scripts {
         el.setAttribute('data-flix-cap', '');
         if (cls && capClasses.indexOf(cls) < 0) capClasses.push(cls);
       }
+      function sameClass(cls) {
+        var out = [], list = document.getElementsByClassName(cls);
+        for (var i = 0; i < list.length; i++) { if (list[i].getAttribute('class') === cls) out.push(list[i]); }
+        return out;
+      }
       var capSeenByClass = {};
+      // While Flix's controls are on, the site's caption layer still sits where
+      // the site's own (now hidden) control bar left room for it. Move it so
+      // the bottom of the text is a small margin above the frame's bottom, or
+      // above Flix's scrubber while Flix's controls show. The bottom edge is
+      // measured, so lines of any height stay inside the frame.
+      var lifted = false;
+      function captionBox(el) {
+        // The positioned box that holds the text, so the whole layer moves.
+        for (var q = el, up = 0; q && up < 3 && q !== document.body; q = q.parentElement, up++) {
+          if (q.hasAttribute('data-flix-keep')) break;
+          var pos = getComputedStyle(q).position;
+          if (pos === 'absolute' || pos === 'fixed') return q;
+        }
+        return getComputedStyle(el).display === 'inline' ? null : el;
+      }
+      function placeCaptions() {
+        var on = window.__flixHideSiteControls === true;
+        var caps = document.querySelectorAll('[data-flix-cap]:not([data-flix-cap] [data-flix-cap])');
+        var h = window.innerHeight || 1;
+        var target = h - (lifted ? h * 0.27 : Math.max(14, h * 0.05));
+        for (var i = 0; i < caps.length; i++) {
+          var box = captionBox(caps[i]);
+          if (!box) continue;
+          var dy = box.__flixDy || 0;
+          if (!on) {
+            if (dy) { box.style.removeProperty('translate'); box.style.removeProperty('transition'); box.__flixDy = 0; }
+            continue;
+          }
+          var r = caps[i].getBoundingClientRect();
+          if (r.height <= 0 || !(caps[i].textContent || '').trim()) continue;
+          var next = Math.round(target - (r.bottom - dy));
+          // Never push the top of the text above the frame.
+          if (r.top - dy + next < 0) next = Math.round(dy - r.top);
+          if (Math.abs(next - dy) < 2) continue;
+          box.__flixDy = next;
+          box.style.setProperty('translate', '0 ' + next + 'px', 'important');
+          box.style.setProperty('transition', 'translate 0.2s ease', 'important');
+        }
+      }
+      window.addEventListener('resize', placeCaptions);
       new MutationObserver(function (ms) {
         if (!keepEl || !playing()) return;
         for (var i = 0; i < ms.length; i++) {
@@ -672,6 +761,7 @@ enum Scripts {
           var added = ms[i].addedNodes;
           for (var j = 0; j < added.length; j++) { if (added[j].nodeType === 1) captionCandidate(added[j]); }
         }
+        placeCaptions();
       }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
       // Tell the frame above which of its iframes holds the video.
       function announce() {
@@ -690,13 +780,13 @@ enum Scripts {
           style.remove();
         }
       }
-      // While Flix's controls are showing, captions move up off its scrubber.
-      // `translate`, not `transform`, so a layer centred with a transform stays centred.
+      // While Flix's controls are showing, captions move up off its scrubber
+      // (the site's caption layers by placeCaptions, the iPhone's own here).
       var liftCSS = 'video::-webkit-media-text-track-container' +
-        ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }' +
-        capSel + ', [data-flix-cap]:not([data-flix-cap] [data-flix-cap])' +
-        ' { translate: 0 -16vh !important; transition: translate 0.2s ease !important; }';
+        ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }';
       window.__flixLift = function (on) {
+        lifted = !!on;
+        placeCaptions();
         var style = document.getElementById('flix-lift-captions');
         if (on && !style) {
           style = document.createElement('style');
@@ -714,6 +804,7 @@ enum Scripts {
       window.__flixHideControls = function (on) {
         window.__flixHideSiteControls = on;
         applyHide(on);
+        placeCaptions();
         for (var i = 0; i < window.frames.length; i++) {
           try { window.frames[i].postMessage({ __flixControls: on ? 'hide' : 'show' }, '*'); } catch (e) {}
         }
@@ -724,6 +815,10 @@ enum Scripts {
           window.__flixHideControls(d.__flixControls === 'hide');
         }
         if (d && (d.__flixLift === 0 || d.__flixLift === 1)) window.__flixLift(d.__flixLift === 1);
+        // A player frame that just (re)loaded gets the current lift state.
+        if (d && d.__flixVideoFrame === 1 && e.source) {
+          try { e.source.postMessage({ __flixLift: lifted ? 1 : 0 }, '*'); } catch (err) {}
+        }
         // The top page is handled by player-only mode, so only wrapper frames mark the iframe.
         if (d && d.__flixVideoFrame === 1 && window !== window.top) {
           var frames = document.getElementsByTagName('iframe');

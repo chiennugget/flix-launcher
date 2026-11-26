@@ -3,27 +3,36 @@
 Notes for the next Claude Code session. Delete this file once the open items
 below are done.
 
-## Subtitles under Flix's controls (done in code, check on device)
+## Subtitles under Flix's controls (done, check P3–P5 and on a real iPhone)
 
 Ideas 1 and 2 from the owner's plan (2026-11-26) are in `Scripts.video`
 (`ios/Flix/Services/WebController.swift`). Flix still doesn't fetch or draw subtitles.
 - **Caption layer stays visible.** While a video plays, an element in the lower part of
   the frame whose text changes to new words twice, with no buttons, sliders or inputs in
   or around it, is marked `data-flix-cap` (and later elements with the same class, since
-  React re-creates them). The hide rule now sets `visibility: visible` on marked layers
-  and their children. The lift uses `translate`, so layers centred with a transform stay
-  centred. The native hide is narrowed to the panel and play buttons, so iOS can still
-  draw subtitles that come inside the stream.
-- **Flix's Audio & Subtitles panel drives the site's menu.** `siteSubs()` finds the
-  site's subtitle list by its "Off" entry (it's in the page even while closed), lists its
-  languages (ids 1000+), reads the current pick (the entry styled unlike the others) and
-  presses entries with `.click()`. Without such a menu, the native tracks are used as
-  before.
-- Checked in a desktop browser on vidcore.io (P2) and vidy.st (P3): the menu reads and
-  switches on both (P2 then loads cues into its own hidden track); the detector marks
-  P3's caption layer. **Not yet checked on an iPhone** under Flix's controls; P1, P4, P5
-  not checked at all. If P2 shows nothing, see where it draws lines (it listens for
-  `cuechange` and renders them with React; nothing rendered in the desktop browser).
+  React re-creates them, unless many elements share that class). The hide rule sets
+  `visibility: visible` on marked layers and their children. The native hide is narrowed
+  to the panel and play buttons, so iOS can still draw subtitles inside the stream.
+- **Placement (`placeCaptions`).** The site's layer still sits where its hidden control
+  bar left room. Flix measures the text's bottom edge and moves the layer (`translate`)
+  so it ends 5% above the frame's bottom, or 27% while Flix's controls show (clears the
+  scrubber). Lines of any height stay inside the frame. A reloaded player frame gets the
+  current lift state from the frame above when it announces itself.
+- **Flix's Audio & Subtitles panel.**
+  - Sites with their subtitle list in the page (vidy.st, desktop vidcore): `siteSubs()`
+    finds it by its "Off" entry, lists its languages (ids 1000+), reads the current pick
+    (the entry styled unlike the others) and presses entries with `.click()`.
+  - vidcore.io on a phone (P2): the menu isn't in the page until its CC button is tapped
+    (a script `.click()` only sets its state, nothing renders), and its video tracks stay
+    empty until a language is picked. It loads the language saved in its own
+    `localStorage` key `language` at start, so Flix saves the picked code there (names
+    mapped with `Intl.DisplayNames`), reloads the player frame and seeks back to the same
+    time (`sessionStorage` `flixResumeAt`). Off removes the key.
+  - Otherwise the native tracks are used, as before.
+- Checked on the iPhone 17e simulator (2026-11-26): P1 (stellarconductornexus.com, a JW
+  player drawing `span.jw-sub-text`) and P2 (vidcore.io) show subtitles under Flix's
+  controls, low when the controls are hidden and above the scrubber when they show. P3,
+  P4, P5 not checked on iOS. Not checked on a real iPhone.
 - vidy.st picks Chinese by default; the owner can now switch it from Flix's panel.
 - Fallback if this fails on device: catch the subtitle file and add it as a native track
   (`addTextTrack` + `VTTCue`). The owner prefers not to.
