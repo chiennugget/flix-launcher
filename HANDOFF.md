@@ -1,11 +1,56 @@
-# Handoff: after the redesign and QA release
+# Handoff: subtitles under Flix's controls (next task)
 
 Notes for the next Claude Code session. Delete this file once the open items
 below are done.
 
+## Next task: make subtitles show under Flix's controls (owner's decision)
+
+**Do ideas 1 and 2 together, in one PR.** The owner chose this on 2026-11-26. Subtitles
+must show in Flix's own player, not only with the site's controls or the iPhone's
+full-screen player, and Flix must not fetch or draw subtitles itself.
+
+What's known:
+- No player shows subtitles under Flix's controls (owner, on device, 1.0.37).
+- The site player's own subtitles **work**: with "Use the site's controls" the owner can
+  turn them on. Switching back to Flix's controls makes them disappear.
+- Cause of the disappearing: the hide rule from 1.0.35 (`data-flix-keep` in
+  `Scripts.video`) hides everything in the player frame except the video and its
+  parents, including the site's caption text. The site players use generated class names
+  (MUI, e.g. `mui-1iv6od4`), so `capSel` and name guesses like `[class*="ubtitle"]` miss it.
+- Flix's Audio & Subtitles panel only sets a native `textTrack.mode = 'showing'`. On P2/P3
+  that track stays empty (`cues.length == 0` for minutes), because the site player loads
+  its own subtitle file and draws lines in the page. So the panel does nothing visible.
+
+The plan:
+1. **Keep the site's caption layer visible under Flix's controls.** Find it by behaviour,
+   not name: a non-interactive element (no buttons/inputs/sliders inside or around it)
+   whose text changes while the video plays, in the lower part of the frame. Mark it
+   `data-flix-cap` and keep it visible (children inherit a hidden parent's visibility,
+   so the rule must set `visibility: visible` on it and its children). Keep hiding the rest.
+2. **Make Flix's Audio & Subtitles panel drive the site player's own subtitle menu.**
+   From JS in the player frame, open the site player's CC/settings menu and click the
+   language Flix's panel picked (`.click()` works while the menu is hidden). List the
+   site menu's languages in Flix's panel instead of the empty native tracks. Per-player
+   selectors are needed; start with P2 and P3 (vidcore.io / vidy.st MUI players).
+3. Fallback (only if 1+2 fail): catch the subtitle file the site downloads and add it as a
+   native track (`addTextTrack` + `VTTCue`). Last resort: mirror caption text into a
+   SwiftUI layer. The owner prefers not to.
+
+Testing rules from the owner: **don't keep videos playing** for long checks. Prefer
+reading the DOM by script (a short `setInterval` probe posting to the `flixPage` handler,
+logged with `NSLog("FLIXDEBUG …")` and read via
+`xcrun simctl spawn <device> log stream --predicate 'eventMessage CONTAINS "FLIXDEBUG"'`),
+then quit the app (`xcrun simctl terminate`). Strip all `FLIXDEBUG` code before committing.
+
+A local-only branch `claude/fix-subtitles` (commit `43cc038`, not pushed) holds the earlier
+attempt: `[data-flix-cap]` made visible again, the native
+`::-webkit-media-controls` hide narrowed to the panel and play buttons, the name-guess
+caption marking, and a FLIXDEBUG probe. Reuse what helps; don't merge it as is.
+
 ## Where things are
 
-- **Everything is on `main`.** PR #14 (https://github.com/chiennugget/flix-launcher/pull/14)
+- **Everything shipped is on `main`**, latest release Flix 1.0.37 (PRs #15–#17 after
+  the items below). PR #14 (https://github.com/chiennugget/flix-launcher/pull/14)
   was pointed at `main` and squash-merged as `d1b4a37`. It carried the Netflix-style
   redesign, the first round of bug fixes and the QA fixes below. Release build 33
   (version 1.0.33) was published from it.
@@ -37,6 +82,12 @@ cd ios && xcodegen generate && xcodebuild -project Flix.xcodeproj -scheme Flix \
   coordinates stop matching and taps land in the wrong place. Rotate back to portrait,
   or reboot the simulator, if taps in the player seem to do nothing.
 - Wait for scroll animations to stop before tapping a tile, or the tap is eaten.
+- Even from a fresh boot, taps in the forced-landscape player drift out of sync after a
+  relaunch. A rotate right then left sometimes re-syncs; don't spend long on it.
+- `defaults write` from the command line doesn't reach the app's settings. Edit the plist
+  in the app container instead (app quit first):
+  `$(xcrun simctl get_app_container <device> io.github.chiennugget.flix data)/Library/Preferences/io.github.chiennugget.flix.plist`
+  with `plutil`, then `xcrun simctl spawn <device> killall cfprefsd`.
 
 ## Fixed in the QA pass (in 1.0.33)
 
@@ -75,8 +126,7 @@ cd ios && xcodegen generate && xcodebuild -project Flix.xcodeproj -scheme Flix \
    drifting out of sync, even after a reboot): Flix's controls only on P1 to P5, playing
    and paused; "Use the site's controls", then "Flix controls" in the floating bar;
    captions moving up while the controls show.
-2. **P2 subtitles**: picking English in Audio & Subtitles showed no captions during
-   dialogue in one try. Unconfirmed.
+2. **Subtitles**: see "Next task" above.
 3. **P2 while loading**: the site's server button and "Fetching your content" spinner
    show under Flix's controls until a video exists. Left as is.
 4. **A finished series** stays in Continue Watching at its last episode (only movies are
