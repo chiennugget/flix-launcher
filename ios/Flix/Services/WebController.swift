@@ -192,6 +192,14 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
         content.removeAllUserScripts()
         content.addUserScript(WKUserScript(source: "window.__flixHideSiteControls = \(siteControlsHidden);",
                                            injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        // vidcore.io loads the subtitle language saved in its storage, which doesn't
+        // last between player sessions; put Flix's saved pick back before it starts.
+        if let code = UserDefaults.standard.string(forKey: Keys.siteSubtitleLanguage) {
+            let set = code.isEmpty ? "localStorage.removeItem('language')" : "localStorage.setItem('language', '\(code)')"
+            content.addUserScript(WKUserScript(
+                source: "if (/(^|\\.)vidcore\\.io$/.test(location.hostname)) { try { \(set); } catch (e) {} }",
+                injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        }
         baseScripts.forEach(content.addUserScript)
     }
 
@@ -322,6 +330,11 @@ final class WebController: NSObject, ObservableObject, WKNavigationDelegate, WKU
                 onFullscreen?(body["mode"] as? String == "exit")
             case "focused":
                 onPlayerFocused?()
+            case "subtitleLanguage":
+                // The player's own storage doesn't last between sessions, so Flix keeps the pick.
+                let code = (body["code"] as? String ?? "").filter { $0.isLetter || $0 == "-" }.prefix(8)
+                UserDefaults.standard.set(String(code), forKey: Keys.siteSubtitleLanguage)
+                if let content = webView?.configuration.userContentController { installScripts(in: content) }
             default:
                 break
             }
@@ -549,6 +562,7 @@ enum Scripts {
             localStorage.setItem('language', code);
           }
           sessionStorage.setItem('flixResumeAt', String(v.currentTime));
+          window.webkit.messageHandlers.flixPage.postMessage({ type: 'subtitleLanguage', code: arg < 0 ? '' : code });
         } catch (e) { return false; }
         location.reload();
         return true;
@@ -714,11 +728,14 @@ enum Scripts {
       }
       var capSeenByClass = {};
       // While Flix's controls are on, the site's caption layer still sits where
-      // the site's own (now hidden) control bar left room for it. Move it so
-      // the bottom of the text is a small margin above the frame's bottom, or
-      // above Flix's scrubber while Flix's controls show. The bottom edge is
-      // measured, so lines of any height stay inside the frame.
+      // the site's own (now hidden) control bar left room for it, and some
+      // players move it again when the screen is tapped. Every frame, Flix
+      // measures the text's natural bottom edge (minus its own offset) and
+      // eases the layer to a small margin above the frame's bottom, or above
+      // Flix's scrubber while Flix's controls show. Measuring the bottom edge
+      // keeps lines of any height inside the frame.
       var lifted = false;
+      var placing = false;
       function captionBox(el) {
         // The positioned box that holds the text, so the whole layer moves.
         for (var q = el, up = 0; q && up < 3 && q !== document.body; q = q.parentElement, up++) {
@@ -738,21 +755,34 @@ enum Scripts {
           if (!box) continue;
           var dy = box.__flixDy || 0;
           if (!on) {
-            if (dy) { box.style.removeProperty('translate'); box.style.removeProperty('transition'); box.__flixDy = 0; }
+            if (dy) { box.style.removeProperty('translate'); box.__flixDy = 0; box.__flixPlaced = false; }
             continue;
           }
           var r = caps[i].getBoundingClientRect();
           if (r.height <= 0 || !(caps[i].textContent || '').trim()) continue;
-          var next = Math.round(target - (r.bottom - dy));
+          var want = target - (r.bottom - dy);
           // Never push the top of the text above the frame.
-          if (r.top - dy + next < 0) next = Math.round(dy - r.top);
-          if (Math.abs(next - dy) < 2) continue;
+          if (r.top - dy + want < 0) want = dy - r.top;
+          var diff = want - dy;
+          if (Math.abs(diff) < 0.5) continue;
+          // A new layer snaps into place; one already shown eases, so a tap
+          // that moves it glides rather than jumps.
+          var next = !box.__flixPlaced || Math.abs(diff) < 2 ? want : dy + diff * 0.3;
+          box.__flixPlaced = true;
           box.__flixDy = next;
-          box.style.setProperty('translate', '0 ' + next + 'px', 'important');
-          box.style.setProperty('transition', 'translate 0.2s ease', 'important');
+          box.style.setProperty('translate', '0 ' + next.toFixed(1) + 'px', 'important');
         }
       }
-      window.addEventListener('resize', placeCaptions);
+      function placeLoop() {
+        if (window.__flixHideSiteControls !== true) { placeCaptions(); placing = false; return; }
+        placeCaptions();
+        requestAnimationFrame(placeLoop);
+      }
+      function startPlacing() {
+        if (placing || !document.querySelector('[data-flix-cap]')) return;
+        placing = true;
+        requestAnimationFrame(placeLoop);
+      }
       new MutationObserver(function (ms) {
         if (!keepEl || !playing()) return;
         for (var i = 0; i < ms.length; i++) {
@@ -761,7 +791,7 @@ enum Scripts {
           var added = ms[i].addedNodes;
           for (var j = 0; j < added.length; j++) { if (added[j].nodeType === 1) captionCandidate(added[j]); }
         }
-        placeCaptions();
+        startPlacing();
       }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
       // Tell the frame above which of its iframes holds the video.
       function announce() {
@@ -786,7 +816,7 @@ enum Scripts {
         ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }';
       window.__flixLift = function (on) {
         lifted = !!on;
-        placeCaptions();
+        startPlacing();
         var style = document.getElementById('flix-lift-captions');
         if (on && !style) {
           style = document.createElement('style');
@@ -804,7 +834,7 @@ enum Scripts {
       window.__flixHideControls = function (on) {
         window.__flixHideSiteControls = on;
         applyHide(on);
-        placeCaptions();
+        if (on) startPlacing(); else placeCaptions();
         for (var i = 0; i < window.frames.length; i++) {
           try { window.frames[i].postMessage({ __flixControls: on ? 'hide' : 'show' }, '*'); } catch (e) {}
         }

@@ -13,11 +13,12 @@ Ideas 1 and 2 from the owner's plan (2026-11-26) are in `Scripts.video`
   React re-creates them, unless many elements share that class). The hide rule sets
   `visibility: visible` on marked layers and their children. The native hide is narrowed
   to the panel and play buttons, so iOS can still draw subtitles inside the stream.
-- **Placement (`placeCaptions`).** The site's layer still sits where its hidden control
-  bar left room. Flix measures the text's bottom edge and moves the layer (`translate`)
-  so it ends 5% above the frame's bottom, or 27% while Flix's controls show (clears the
-  scrubber). Lines of any height stay inside the frame. A reloaded player frame gets the
-  current lift state from the frame above when it announces itself.
+- **Placement (`placeCaptions`, run every frame while Flix's controls are on).** The
+  site's layer still sits where its hidden control bar left room, and some players
+  (P1's JW) move it again on a tap. Flix measures the text's natural bottom edge (minus
+  its own `translate`) and eases the layer to 5% above the frame's bottom, or 27% while
+  Flix's controls show. A new layer snaps; one on screen glides (~0.3 s), so there's no
+  jumping. A reloaded player frame gets the current lift state when it announces itself.
 - **Flix's Audio & Subtitles panel.**
   - Sites with their subtitle list in the page (vidy.st, desktop vidcore): `siteSubs()`
     finds it by its "Off" entry, lists its languages (ids 1000+), reads the current pick
@@ -27,7 +28,9 @@ Ideas 1 and 2 from the owner's plan (2026-11-26) are in `Scripts.video`
     empty until a language is picked. It loads the language saved in its own
     `localStorage` key `language` at start, so Flix saves the picked code there (names
     mapped with `Intl.DisplayNames`), reloads the player frame and seeks back to the same
-    time (`sessionStorage` `flixResumeAt`). Off removes the key.
+    time (`sessionStorage` `flixResumeAt`). Off removes the key. The embed's storage
+    doesn't last between player sessions, so Flix also keeps the pick in UserDefaults
+    (`siteSubtitleLanguage`) and writes it back at document start in vidcore frames.
   - Otherwise the native tracks are used, as before.
 - Checked on the iPhone 17e simulator (2026-11-26): P1 (stellarconductornexus.com, a JW
   player drawing `span.jw-sub-text`) and P2 (vidcore.io) show subtitles under Flix's
