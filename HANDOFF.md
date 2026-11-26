@@ -1,51 +1,40 @@
-# Handoff: subtitles under Flix's controls (next task)
+# Handoff: Flix player notes
 
 Notes for the next Claude Code session. Delete this file once the open items
 below are done.
 
-## Next task: make subtitles show under Flix's controls (owner's decision)
+## Subtitles under Flix's controls (done in code, check on device)
 
-**Do ideas 1 and 2 together, in one PR.** The owner chose this on 2026-11-26. Subtitles
-must show in Flix's own player, not only with the site's controls or the iPhone's
-full-screen player, and Flix must not fetch or draw subtitles itself.
-
-What's known:
-- No player shows subtitles under Flix's controls (owner, on device, 1.0.37).
-- The site player's own subtitles **work**: with "Use the site's controls" the owner can
-  turn them on. Switching back to Flix's controls makes them disappear.
-- Cause of the disappearing: the hide rule from 1.0.35 (`data-flix-keep` in
-  `Scripts.video`) hides everything in the player frame except the video and its
-  parents, including the site's caption text. The site players use generated class names
-  (MUI, e.g. `mui-1iv6od4`), so `capSel` and name guesses like `[class*="ubtitle"]` miss it.
-- Flix's Audio & Subtitles panel only sets a native `textTrack.mode = 'showing'`. On P2/P3
-  that track stays empty (`cues.length == 0` for minutes), because the site player loads
-  its own subtitle file and draws lines in the page. So the panel does nothing visible.
-
-The plan:
-1. **Keep the site's caption layer visible under Flix's controls.** Find it by behaviour,
-   not name: a non-interactive element (no buttons/inputs/sliders inside or around it)
-   whose text changes while the video plays, in the lower part of the frame. Mark it
-   `data-flix-cap` and keep it visible (children inherit a hidden parent's visibility,
-   so the rule must set `visibility: visible` on it and its children). Keep hiding the rest.
-2. **Make Flix's Audio & Subtitles panel drive the site player's own subtitle menu.**
-   From JS in the player frame, open the site player's CC/settings menu and click the
-   language Flix's panel picked (`.click()` works while the menu is hidden). List the
-   site menu's languages in Flix's panel instead of the empty native tracks. Per-player
-   selectors are needed; start with P2 and P3 (vidcore.io / vidy.st MUI players).
-3. Fallback (only if 1+2 fail): catch the subtitle file the site downloads and add it as a
-   native track (`addTextTrack` + `VTTCue`). Last resort: mirror caption text into a
-   SwiftUI layer. The owner prefers not to.
-
-Testing rules from the owner: **don't keep videos playing** for long checks. Prefer
-reading the DOM by script (a short `setInterval` probe posting to the `flixPage` handler,
-logged with `NSLog("FLIXDEBUG …")` and read via
-`xcrun simctl spawn <device> log stream --predicate 'eventMessage CONTAINS "FLIXDEBUG"'`),
-then quit the app (`xcrun simctl terminate`). Strip all `FLIXDEBUG` code before committing.
-
-A local-only branch `claude/fix-subtitles` (commit `43cc038`, not pushed) holds the earlier
-attempt: `[data-flix-cap]` made visible again, the native
-`::-webkit-media-controls` hide narrowed to the panel and play buttons, the name-guess
-caption marking, and a FLIXDEBUG probe. Reuse what helps; don't merge it as is.
+Ideas 1 and 2 from the owner's plan (2026-11-26) are in `Scripts.video`
+(`ios/Flix/Services/WebController.swift`). Flix still doesn't fetch or draw subtitles.
+- **Caption layer stays visible.** While a video plays, an element in the lower part of
+  the frame whose text changes to new words twice, with no buttons, sliders or inputs in
+  or around it, is marked `data-flix-cap` (and later elements with the same class, since
+  React re-creates them). The hide rule now sets `visibility: visible` on marked layers
+  and their children. The lift uses `translate`, so layers centred with a transform stay
+  centred. The native hide is narrowed to the panel and play buttons, so iOS can still
+  draw subtitles that come inside the stream.
+- **Flix's Audio & Subtitles panel drives the site's menu.** `siteSubs()` finds the
+  site's subtitle list by its "Off" entry (it's in the page even while closed), lists its
+  languages (ids 1000+), reads the current pick (the entry styled unlike the others) and
+  presses entries with `.click()`. Without such a menu, the native tracks are used as
+  before.
+- Checked in a desktop browser on vidcore.io (P2) and vidy.st (P3): the menu reads and
+  switches on both (P2 then loads cues into its own hidden track); the detector marks
+  P3's caption layer. **Not yet checked on an iPhone** under Flix's controls; P1, P4, P5
+  not checked at all. If P2 shows nothing, see where it draws lines (it listens for
+  `cuechange` and renders them with React; nothing rendered in the desktop browser).
+- vidy.st picks Chinese by default; the owner can now switch it from Flix's panel.
+- Fallback if this fails on device: catch the subtitle file and add it as a native track
+  (`addTextTrack` + `VTTCue`). The owner prefers not to.
+- The local-only branch `claude/fix-subtitles` (earlier attempt) is superseded and can be
+  deleted.
+- Owner's testing rules: don't keep videos playing for long checks. Read the DOM by
+  script (a short `setInterval` probe posting to `flixPage`, logged with
+  `NSLog("FLIXDEBUG …")`, read via `xcrun simctl spawn <device> log stream --predicate
+  'eventMessage CONTAINS "FLIXDEBUG"'`), then quit the app. Strip `FLIXDEBUG` code before
+  committing. The player embeds also open directly in a browser
+  (`https://vidcore.io/movie/<tmdb id>`, `https://vidy.st/movie/<tmdb id>`).
 
 ## Where things are
 
@@ -126,7 +115,7 @@ cd ios && xcodegen generate && xcodebuild -project Flix.xcodeproj -scheme Flix \
    drifting out of sync, even after a reboot): Flix's controls only on P1 to P5, playing
    and paused; "Use the site's controls", then "Flix controls" in the floating bar;
    captions moving up while the controls show.
-2. **Subtitles**: see "Next task" above.
+2. **Subtitles**: check on an iPhone (see the top section).
 3. **P2 while loading**: the site's server button and "Fetching your content" spinner
    show under Flix's controls until a video exists. Left as is.
 4. **A finished series** stays in Continue Watching at its last episode (only movies are

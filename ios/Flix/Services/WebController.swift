@@ -426,10 +426,81 @@ enum Scripts {
         return best;
       }
       function isText(t) { return t.kind === 'subtitles' || t.kind === 'captions'; }
+      // The site player's own subtitle menu. Players like vidcore.io and
+      // vidy.st load and draw subtitles themselves, so their video's native
+      // tracks stay empty (or missing); picking a language in their menu is
+      // what turns subtitles on. The menu is in the page even while closed:
+      // a list whose first entry is "Off", followed by the languages. The
+      // picked entry is the one styled differently from the others.
+      var notLanguage = /upload|custom|search|opensub|appearance|setting|style|size|color|colour|delay|sync/i;
+      // Class plus the icon's shapes, attributes sorted (React may reorder them).
+      function sigOf(el) {
+        var sig = el.getAttribute('class') || '';
+        var shapes = el.querySelectorAll('svg *');
+        for (var i = 0; i < shapes.length; i++) {
+          var attrs = [];
+          for (var a = 0; a < shapes[i].attributes.length; a++) {
+            attrs.push(shapes[i].attributes[a].name + '=' + shapes[i].attributes[a].value);
+          }
+          sig += '|' + shapes[i].tagName + ':' + attrs.sort().join(',');
+        }
+        return sig;
+      }
+      function prettyLanguage(label) {
+        if (!/^[a-z]{2,3}(-[a-z]{2})?$/i.test(label)) return label;
+        try {
+          var name = new Intl.DisplayNames(['en'], { type: 'language' }).of(label);
+          if (name && name.toLowerCase() !== label.toLowerCase()) return name;
+        } catch (e) {}
+        return label;
+      }
+      function siteSubs() {
+        if (!document.body) return null;
+        var best = null;
+        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (var n = walker.nextNode(); n; n = walker.nextNode()) {
+          if (n.textContent.trim().toLowerCase() !== 'off') continue;
+          // Climb to the list: the first ancestor with other entries (with text)
+          // beside the "Off" row. A row's own icon has no text, so it doesn't count.
+          var row = n.parentElement, list = null;
+          for (var up = 0; row && up < 6; up++) {
+            var parent = row.parentElement, others = 0;
+            for (var o = 0; parent && o < parent.children.length; o++) {
+              if (parent.children[o] !== row && (parent.children[o].textContent || '').trim()) others++;
+            }
+            if (others >= 1) { list = parent; break; }
+            row = parent;
+          }
+          if (!list) continue;
+          var items = [];
+          for (var c = 0; c < list.children.length; c++) {
+            var el = list.children[c];
+            if (el === row) continue;
+            var label = (el.textContent || '').trim();
+            if (!label || label.length > 40 || notLanguage.test(label)) continue;
+            items.push({ el: el, l: prettyLanguage(label) });
+          }
+          if (!items.length || (best && best.items.length >= items.length)) continue;
+          // Picked entry: the one whose style differs from all the others.
+          var rows = [row].concat(items.map(function (it) { return it.el; }));
+          var counts = {}, sigs = rows.map(sigOf);
+          sigs.forEach(function (s) { counts[s] = (counts[s] || 0) + 1; });
+          var odd = sigs.filter(function (s) { return counts[s] === 1; });
+          var sel = null;
+          if (odd.length === 1 && rows.length > 2) sel = sigs.indexOf(odd[0]) - 1; // -1 = Off
+          best = { off: row, items: items, sel: sel };
+        }
+        return best;
+      }
       function trackList(v) {
         var out = { text: [], audio: [] };
+        var site = siteSubs();
+        if (site) {
+          // 1000 + position, so the 'text' command knows it's a site menu entry.
+          site.items.forEach(function (it, k) { out.text.push({ i: 1000 + k, l: it.l, on: site.sel === k }); });
+        }
         var tt = v.textTracks || [];
-        for (var i = 0; i < tt.length; i++) {
+        for (var i = 0; i < tt.length && !site; i++) {
           if (isText(tt[i])) {
             out.text.push({ i: i, l: tt[i].label || tt[i].language || ('Subtitles ' + (i + 1)), on: tt[i].mode === 'showing' });
           }
@@ -454,6 +525,11 @@ enum Scripts {
           v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + arg));
         } else if (cmd === 'rate') {
           v.playbackRate = arg;
+        } else if (cmd === 'text' && siteSubs()) {
+          // Press the entry in the site's own menu; .click() works while the menu is hidden.
+          var site = siteSubs();
+          var pick = arg < 0 ? site.off : (site.items[arg - 1000] || {}).el;
+          if (pick) pick.click();
         } else if (cmd === 'text') {
           var tt = v.textTracks || [];
           for (var k = 0; k < tt.length; k++) { if (isText(tt[k])) tt[k].mode = (k === arg) ? 'showing' : 'disabled'; }
@@ -510,14 +586,21 @@ enum Scripts {
         // The embed wrapper's own title bar ("Show · S01 E01") over the player.
         '#vs-bar', '#vs-title'
       ].join(',') + ' { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }' +
-        ' video::-webkit-media-controls, video::-webkit-media-controls-start-playback-button' +
-        ' { display: none !important; }' +
+        // Only the built-in bar and play buttons: hiding all of
+        // ::-webkit-media-controls also hides the layer where iOS draws
+        // subtitles that come inside the video stream (HLS).
+        ' video::-webkit-media-controls-panel, video::-webkit-media-controls-start-playback-button,' +
+        ' video::-webkit-media-controls-overlay-play-button { display: none !important; }' +
         // Players with unknown or generated class names: once a frame knows
         // where the video is (the video itself, or the iframe that holds it),
         // everything else in that frame is hidden. Caption layers stay.
         // Data attributes, not classes: frameworks like React rewrite className.
         ' html[data-flix-haskeep] *:not([data-flix-keep]):not([data-flix-cap]):not([data-flix-cap] *)' +
-        ' { visibility: hidden !important; pointer-events: none !important; }';
+        ' { visibility: hidden !important; pointer-events: none !important; }' +
+        // Children inherit a hidden parent's visibility, so caption layers
+        // must be made visible again, not just left out of the rule above.
+        ' html[data-flix-haskeep] [data-flix-cap], html[data-flix-haskeep] [data-flix-cap] *' +
+        ' { visibility: visible !important; }';
       var capSel = '.jw-captions, .jw-text-track-container, .vjs-text-track-display, .plyr__captions, ' +
         '.art-subtitle, .dplayer-subtitle, .mejs__captions-layer, .fluid_subtitles_container';
       var keepEl = null;
@@ -535,7 +618,61 @@ enum Scripts {
       function markCaptions() {
         var caps = document.querySelectorAll(capSel);
         for (var i = 0; i < caps.length; i++) caps[i].setAttribute('data-flix-cap', '');
+        // Caption layers found by behaviour (below); React may re-create them.
+        for (var j = 0; j < capClasses.length; j++) {
+          var same = document.getElementsByClassName(capClasses[j]);
+          for (var k = 0; k < same.length; k++) {
+            if (same[k].getAttribute('class') === capClasses[j]) same[k].setAttribute('data-flix-cap', '');
+          }
+        }
       }
+      // Players with generated class names: find the caption layer by what it
+      // does, not what it's called. While a video plays, an element in the
+      // lower part of the frame whose text changes to new words, with no
+      // buttons, sliders or inputs in or around it, is the caption layer.
+      var capClasses = [];
+      var capSeen = new WeakMap();
+      var interactive = 'button, input, select, textarea, a[href], [role="button"], [role="menu"], ' +
+        '[role="menuitem"], [role="slider"], [role="listbox"], [role="option"], [contenteditable]';
+      function playing() {
+        var videos = document.getElementsByTagName('video');
+        for (var i = 0; i < videos.length; i++) { if (!videos[i].paused && !videos[i].ended) return true; }
+        return false;
+      }
+      function captionCandidate(el) {
+        if (!el || el.nodeType !== 1 || el === document.body || el === document.documentElement) return;
+        if (el.hasAttribute('data-flix-cap') || el.hasAttribute('data-flix-keep') || el.closest('[data-flix-cap]')) return;
+        var text = (el.textContent || '').trim();
+        // Words, not a clock or a percentage.
+        if (!text || text.length > 300 || !/[^\d\s:\/\-.,%]/.test(text)) return;
+        if (el.closest(interactive) || el.querySelector(interactive)) return;
+        var r = el.getBoundingClientRect();
+        var h = window.innerHeight || 1;
+        if (r.height <= 0 || r.height > h * 0.5 || r.top + r.height / 2 < h * 0.4) return;
+        // Counted by class as well, since players often re-create the element per line.
+        var cls = el.getAttribute('class') || '';
+        var seen = cls ? capSeenByClass[cls] : capSeen.get(el);
+        if (!seen) {
+          seen = { last: text, n: 0 };
+          if (cls) capSeenByClass[cls] = seen; else capSeen.set(el, seen);
+          return;
+        }
+        if (seen.last === text) return;
+        seen.last = text;
+        if (++seen.n < 2) return;
+        el.setAttribute('data-flix-cap', '');
+        if (cls && capClasses.indexOf(cls) < 0) capClasses.push(cls);
+      }
+      var capSeenByClass = {};
+      new MutationObserver(function (ms) {
+        if (!keepEl || !playing()) return;
+        for (var i = 0; i < ms.length; i++) {
+          var t = ms[i].target;
+          captionCandidate(t.nodeType === 1 ? t : t.parentElement);
+          var added = ms[i].addedNodes;
+          for (var j = 0; j < added.length; j++) { if (added[j].nodeType === 1) captionCandidate(added[j]); }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
       // Tell the frame above which of its iframes holds the video.
       function announce() {
         if (window !== window.top) {
@@ -554,8 +691,11 @@ enum Scripts {
         }
       }
       // While Flix's controls are showing, captions move up off its scrubber.
-      var liftCSS = 'video::-webkit-media-text-track-container, ' + capSel +
-        ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }';
+      // `translate`, not `transform`, so a layer centred with a transform stays centred.
+      var liftCSS = 'video::-webkit-media-text-track-container' +
+        ' { transform: translateY(-16vh) !important; transition: transform 0.2s ease !important; }' +
+        capSel + ', [data-flix-cap]:not([data-flix-cap] [data-flix-cap])' +
+        ' { translate: 0 -16vh !important; transition: translate 0.2s ease !important; }';
       window.__flixLift = function (on) {
         var style = document.getElementById('flix-lift-captions');
         if (on && !style) {
