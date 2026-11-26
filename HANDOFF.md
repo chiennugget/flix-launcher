@@ -35,7 +35,7 @@ Ideas 1 and 2 from the owner's plan (2026-11-26) are in `Scripts.video`
 - Checked on the iPhone 17e simulator (2026-11-26): P1 (stellarconductornexus.com, a JW
   player drawing `span.jw-sub-text`) and P2 (vidcore.io) show subtitles under Flix's
   controls, low when the controls are hidden and above the scrubber when they show. P3,
-  P4, P5 not checked on iOS. Not checked on a real iPhone.
+  P4, P5 not checked on iOS (owner: skip them). Not checked on a real iPhone.
 - vidy.st picks Chinese by default; the owner can now switch it from Flix's panel.
 - Fallback if this fails on device: catch the subtitle file and add it as a native track
   (`addTextTrack` + `VTTCue`). The owner prefers not to.
