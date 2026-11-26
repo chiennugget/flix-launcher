@@ -107,6 +107,8 @@ enum Keys {
     static let configURL = "configURL"
     static let autoplayNext = "autoplayNext"
     static let nativeFullscreen = "nativeFullscreen"
+    /// Subtitle language picked for players that remember it themselves (vidcore.io).
+    static let siteSubtitleLanguage = "siteSubtitleLanguage"
     static let profileName = "profileName"
     static let defaultConfigURL = "https://chiennugget.github.io/flix-launcher/domain.json"
     static let rawConfigURL = "https://raw.githubusercontent.com/chiennugget/flix-launcher/main/domain.json"
